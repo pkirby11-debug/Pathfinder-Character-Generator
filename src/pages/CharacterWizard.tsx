@@ -447,7 +447,7 @@ function SkillsStep({ draft, update }: { draft: Character; update: (p: Partial<C
                 {used} / {available} ranks
               </span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1">
               {SKILLS.map((sk) => {
                 const ranks = cl.skillRanks[sk.id] ?? 0;
                 const isClassSkill = klass.classSkills.includes(sk.id);
@@ -456,7 +456,7 @@ function SkillsStep({ draft, update }: { draft: Character; update: (p: Partial<C
                   <div
                     key={sk.id}
                     className={
-                      "flex items-center gap-2 p-2 rounded " +
+                      "flex items-center gap-3 px-2 py-1.5 rounded " +
                       (isClassSkill ? "bg-parchment-200" : "")
                     }
                   >
@@ -465,18 +465,18 @@ function SkillsStep({ draft, update }: { draft: Character; update: (p: Partial<C
                       value={ranks}
                       min={0}
                       max={totalLevel}
-                      className="w-12 field text-center"
+                      className="w-14 field text-center shrink-0"
                       onChange={(e) =>
                         setRank(cl.classId, sk.id, Number(e.target.value) || 0)
                       }
                     />
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm truncate">
+                      <div className="text-sm font-medium leading-tight">
                         {sk.name}
-                        {isClassSkill && <span className="text-xs ml-1 text-ink-700">(C)</span>}
-                        {sk.trainedOnly && <span className="text-xs ml-1 text-rust-600">*</span>}
+                        {isClassSkill && <span className="text-xs ml-1 font-normal text-ink-700">(class)</span>}
+                        {sk.trainedOnly && <span className="text-xs ml-1 text-rust-600" title="Trained only">*</span>}
                       </div>
-                      <div className="text-xs text-ink-700">
+                      <div className="text-xs text-ink-700 leading-tight">
                         {sk.ability.toUpperCase()} · total {abilityModString(total)}
                       </div>
                     </div>
