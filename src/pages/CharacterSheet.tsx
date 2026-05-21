@@ -7,17 +7,9 @@ import { FEATS_BY_ID } from "../data/feats/core";
 import { ITEMS_BY_ID } from "../data/equipment/core";
 import { SPELLS_BY_ID } from "../data/spells/core";
 import { SKILLS } from "../data/skills/skills";
-import { ABILITY_KEYS, ABILITY_NAMES } from "../types/pathfinder";
+import { ABILITY_KEYS, ABILITY_NAMES, type AbilityKey } from "../types/pathfinder";
 import { abilityModString, derive } from "../engine";
-
-// Standard Pathfinder 1E conditions (OGL).
-const COMMON_CONDITIONS = [
-  "Blinded", "Confused", "Dazed", "Dazzled", "Deafened", "Disabled",
-  "Dying", "Entangled", "Exhausted", "Fascinated", "Fatigued",
-  "Flat-Footed", "Frightened", "Grappled", "Helpless", "Nauseated",
-  "Panicked", "Paralyzed", "Pinned", "Prone", "Shaken", "Sickened",
-  "Stable", "Staggered", "Stunned", "Unconscious",
-];
+import { CONDITIONS, SPELL_BUFFS, EFFECTS_BY_ID, type Effect } from "../data/effects/catalog";
 
 export function CharacterSheet() {
   const { id } = useParams();
@@ -71,13 +63,23 @@ export function CharacterSheet() {
 
         {/* Top row: abilities + combat block */}
         <section className="grid grid-cols-1 md:grid-cols-6 gap-3 mb-4">
-          {ABILITY_KEYS.map((k) => (
-            <div key={k} className="stat-box">
-              <div className="font-display text-xs uppercase">{ABILITY_NAMES[k]}</div>
-              <div className="text-2xl font-bold">{d.abilityScores[k]}</div>
-              <div className="text-sm">{abilityModString(d.abilityMods[k])}</div>
-            </div>
-          ))}
+          {ABILITY_KEYS.map((k) => {
+            const current = d.abilityScores[k];
+            const base = d.baseAbilityScores?.[k] ?? current;
+            const changed = base !== current;
+            return (
+              <div key={k} className="stat-box">
+                <div className="font-display text-xs uppercase">{ABILITY_NAMES[k]}</div>
+                <div className={"text-2xl font-bold " + (changed ? (current < base ? "text-rust-600" : "text-emerald-700") : "")}>
+                  {current}
+                </div>
+                <div className="text-sm">{abilityModString(d.abilityMods[k])}</div>
+                {changed && (
+                  <div className="text-xs text-ink-700">base {base}</div>
+                )}
+              </div>
+            );
+          })}
         </section>
 
         <section className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
@@ -115,25 +117,7 @@ export function CharacterSheet() {
           </Block>
         </section>
 
-        <ConditionsPanel
-          active={character.conditions ?? []}
-          custom={customCondition}
-          setCustom={setCustomCondition}
-          toggle={(c) => {
-            const set = new Set(character.conditions ?? []);
-            if (set.has(c)) set.delete(c);
-            else set.add(c);
-            updateCharacter(character.id, { conditions: Array.from(set) });
-          }}
-          addCustom={() => {
-            const v = customCondition.trim();
-            if (!v) return;
-            const set = new Set(character.conditions ?? []);
-            set.add(v);
-            updateCharacter(character.id, { conditions: Array.from(set) });
-            setCustomCondition("");
-          }}
-        />
+{/* Effects and ability modifiers move below saves */}
 
         <section className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
           <Block title="BAB">
@@ -162,6 +146,67 @@ export function CharacterSheet() {
             </Block>
           ))}
         </section>
+
+        <EffectsPanel
+          activeIds={character.activeEffectIds ?? []}
+          customEffects={character.customEffects ?? []}
+          customLabel={customCondition}
+          setCustomLabel={setCustomCondition}
+          toggleEffect={(eid) => {
+            const set = new Set(character.activeEffectIds ?? []);
+            if (set.has(eid)) set.delete(eid);
+            else set.add(eid);
+            updateCharacter(character.id, { activeEffectIds: Array.from(set) });
+          }}
+          addCustom={() => {
+            const v = customCondition.trim();
+            if (!v) return;
+            const newEffect: Effect = {
+              id: `custom_${Date.now()}`,
+              name: v,
+              source: "custom",
+            };
+            updateCharacter(character.id, {
+              customEffects: [...(character.customEffects ?? []), newEffect],
+              activeEffectIds: [...(character.activeEffectIds ?? []), newEffect.id],
+            });
+            setCustomCondition("");
+          }}
+          removeCustom={(eid) => {
+            updateCharacter(character.id, {
+              customEffects: (character.customEffects ?? []).filter((e) => e.id !== eid),
+              activeEffectIds: (character.activeEffectIds ?? []).filter((x) => x !== eid),
+            });
+          }}
+        />
+
+        <AbilityModifiersPanel
+          abilityDamage={character.abilityDamage ?? {}}
+          abilityDrain={character.abilityDrain ?? {}}
+          negativeLevels={character.negativeLevels ?? 0}
+          baseScores={d.baseAbilityScores ?? d.abilityScores}
+          currentScores={d.abilityScores}
+          setDamage={(k, n) =>
+            updateCharacter(character.id, {
+              abilityDamage: { ...character.abilityDamage, [k]: Math.max(0, n) },
+            })
+          }
+          setDrain={(k, n) =>
+            updateCharacter(character.id, {
+              abilityDrain: { ...character.abilityDrain, [k]: Math.max(0, n) },
+            })
+          }
+          setNegativeLevels={(n) =>
+            updateCharacter(character.id, { negativeLevels: Math.max(0, n) })
+          }
+          clearAll={() =>
+            updateCharacter(character.id, {
+              abilityDamage: {},
+              abilityDrain: {},
+              negativeLevels: 0,
+            })
+          }
+        />
 
         {/* Attacks */}
         <section className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -489,77 +534,281 @@ function HpTracker({
   );
 }
 
-interface ConditionsPanelProps {
-  active: string[];
-  custom: string;
-  setCustom: (v: string) => void;
-  toggle: (c: string) => void;
+interface EffectsPanelProps {
+  activeIds: string[];
+  customEffects: Effect[];
+  customLabel: string;
+  setCustomLabel: (v: string) => void;
+  toggleEffect: (eid: string) => void;
   addCustom: () => void;
+  removeCustom: (eid: string) => void;
 }
 
-function ConditionsPanel({ active, custom, setCustom, toggle, addCustom }: ConditionsPanelProps) {
-  const activeSet = new Set(active);
-  const customActive = active.filter((c) => !COMMON_CONDITIONS.includes(c));
+function summarizeEffect(e: Effect): string {
+  const parts: string[] = [];
+  if (e.attack) parts.push(`${signed(e.attack)} attack`);
+  if (e.meleeAttack) parts.push(`${signed(e.meleeAttack)} melee`);
+  if (e.rangedAttack) parts.push(`${signed(e.rangedAttack)} ranged`);
+  if (e.damage) parts.push(`${signed(e.damage)} dmg`);
+  if (e.meleeDamage) parts.push(`${signed(e.meleeDamage)} melee dmg`);
+  if (e.acBonus) parts.push(`${signed(e.acBonus)} AC`);
+  if (e.armorBonus) parts.push(`${signed(e.armorBonus)} armor`);
+  if (e.shieldBonus) parts.push(`${signed(e.shieldBonus)} shield`);
+  if (e.naturalArmor) parts.push(`${signed(e.naturalArmor)} natural`);
+  if (e.deflection) parts.push(`${signed(e.deflection)} deflection`);
+  if (e.dodge) parts.push(`${signed(e.dodge)} dodge`);
+  if (e.losesDexToAc) parts.push("no Dex to AC");
+  if (e.saves?.all) parts.push(`${signed(e.saves.all)} saves`);
+  if (e.saves?.fort) parts.push(`${signed(e.saves.fort)} Fort`);
+  if (e.saves?.ref) parts.push(`${signed(e.saves.ref)} Ref`);
+  if (e.saves?.will) parts.push(`${signed(e.saves.will)} Will`);
+  if (e.saves?.vsFear) parts.push(`${signed(e.saves.vsFear)} vs fear`);
+  if (e.skills) parts.push(`${signed(e.skills)} skills`);
+  if (e.abilityChecks) parts.push(`${signed(e.abilityChecks)} ability checks`);
+  if (e.abilityScores) {
+    for (const [k, v] of Object.entries(e.abilityScores)) {
+      if (typeof v === "number" && v !== 0) parts.push(`${signed(v)} ${k.toUpperCase()}`);
+    }
+  }
+  if (e.initiative) parts.push(`${signed(e.initiative)} init`);
+  if (e.cmb) parts.push(`${signed(e.cmb)} CMB`);
+  if (e.cmd) parts.push(`${signed(e.cmd)} CMD`);
+  if (e.speed) parts.push(`${signed(e.speed)} ft speed`);
+  if (e.halfSpeed) parts.push("½ speed");
+  if (e.extraAttack) parts.push("extra attack");
+  return parts.join(", ");
+}
+
+function signed(n: number): string {
+  return n >= 0 ? `+${n}` : `${n}`;
+}
+
+function EffectsPanel({
+  activeIds, customEffects, customLabel, setCustomLabel,
+  toggleEffect, addCustom, removeCustom,
+}: EffectsPanelProps) {
+  const activeSet = new Set(activeIds);
+  const activeList = activeIds
+    .map((id) => EFFECTS_BY_ID[id] ?? customEffects.find((c) => c.id === id))
+    .filter(Boolean) as Effect[];
+
+  const buffsByCategory: Record<string, Effect[]> = {};
+  for (const b of SPELL_BUFFS) {
+    const cat = b.category ?? "Other";
+    (buffsByCategory[cat] ??= []).push(b);
+  }
 
   return (
-    <section className="mb-4">
-      <div className="flex items-baseline justify-between border-b border-ink-700 mb-2">
-        <h3 className="font-display">Conditions</h3>
-        {active.length > 0 && (
-          <span className="text-xs text-ink-700">{active.length} active</span>
-        )}
-      </div>
-      <div className="flex flex-wrap gap-1">
-        {COMMON_CONDITIONS.map((c) => {
-          const on = activeSet.has(c);
-          return (
-            <button
-              key={c}
-              onClick={() => toggle(c)}
-              className={
-                "text-xs px-2 py-1 rounded border transition-colors no-print " +
-                (on
-                  ? "bg-rust-600 text-parchment-50 border-rust-700"
-                  : "bg-parchment-50 text-ink-800 border-ink-700 hover:bg-parchment-200")
-              }
-            >
-              {c}
-            </button>
-          );
-        })}
-      </div>
-      {customActive.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-2">
-          {customActive.map((c) => (
-            <button
-              key={c}
-              onClick={() => toggle(c)}
-              className="text-xs px-2 py-1 rounded bg-rust-600 text-parchment-50 border border-rust-700 no-print"
-              title="Click to remove"
-            >
-              {c} ✕
-            </button>
-          ))}
+    <section className="mb-4 space-y-3">
+      {/* Active effects summary (also printed) */}
+      {activeList.length > 0 && (
+        <div className="border-2 border-ink-700 rounded-md p-3 bg-parchment-100">
+          <h3 className="font-display border-b border-ink-700 mb-1">
+            Active Effects ({activeList.length})
+          </h3>
+          <ul className="text-sm space-y-0.5">
+            {activeList.map((e) => (
+              <li key={e.id} className="flex justify-between gap-2">
+                <span>
+                  <strong>{e.name}.</strong>{" "}
+                  <span className="text-ink-700">{summarizeEffect(e) || e.description}</span>
+                </span>
+                <button
+                  className="text-xs btn-ghost no-print shrink-0"
+                  onClick={() =>
+                    e.source === "custom" ? removeCustom(e.id) : toggleEffect(e.id)
+                  }
+                  title="Remove"
+                >
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
-      <div className="mt-2 flex gap-1 no-print">
-        <input
-          type="text"
-          value={custom}
-          placeholder="Add custom condition…"
-          onChange={(e) => setCustom(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") addCustom();
-          }}
-          className="field w-full max-w-xs text-sm"
-        />
-        <button className="btn-secondary text-xs" onClick={addCustom}>
-          Add
-        </button>
+
+      <div className="no-print">
+        <h3 className="font-display border-b border-ink-700 mb-2">Conditions</h3>
+        <div className="flex flex-wrap gap-1">
+          {CONDITIONS.map((c) => {
+            const on = activeSet.has(c.id);
+            return (
+              <button
+                key={c.id}
+                onClick={() => toggleEffect(c.id)}
+                title={c.description}
+                className={
+                  "text-xs px-2 py-1 rounded border transition-colors " +
+                  (on
+                    ? "bg-rust-600 text-parchment-50 border-rust-700"
+                    : "bg-parchment-50 text-ink-800 border-ink-700 hover:bg-parchment-200")
+                }
+              >
+                {c.name}
+              </button>
+            );
+          })}
+        </div>
       </div>
-      {/* Print-only summary: active conditions inline */}
-      <div className="hidden print:block text-sm">
-        {active.length === 0 ? <em>None</em> : active.join(", ")}
+
+      <div className="no-print">
+        <h3 className="font-display border-b border-ink-700 mb-2">Buffs &amp; Debuffs</h3>
+        <div className="space-y-2">
+          {Object.entries(buffsByCategory).map(([cat, list]) => (
+            <div key={cat}>
+              <div className="text-xs uppercase tracking-wider text-ink-700">{cat}</div>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {list.map((b) => {
+                  const on = activeSet.has(b.id);
+                  return (
+                    <button
+                      key={b.id}
+                      onClick={() => toggleEffect(b.id)}
+                      title={b.description}
+                      className={
+                        "text-xs px-2 py-1 rounded border transition-colors " +
+                        (on
+                          ? "bg-rust-600 text-parchment-50 border-rust-700"
+                          : "bg-parchment-50 text-ink-800 border-ink-700 hover:bg-parchment-200")
+                      }
+                    >
+                      {b.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="no-print">
+        <h3 className="font-display border-b border-ink-700 mb-2">Custom Effect</h3>
+        <div className="flex gap-1">
+          <input
+            type="text"
+            value={customLabel}
+            placeholder="Name a custom effect (no mechanical mods)…"
+            onChange={(e) => setCustomLabel(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") addCustom();
+            }}
+            className="field w-full max-w-md text-sm"
+          />
+          <button className="btn-secondary text-xs" onClick={addCustom}>
+            Add
+          </button>
+        </div>
+        <p className="text-xs text-ink-700 mt-1">
+          Custom effects appear in the Active Effects list but apply no automatic modifiers.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+interface AbilityModifiersPanelProps {
+  abilityDamage: Partial<Record<AbilityKey, number>>;
+  abilityDrain: Partial<Record<AbilityKey, number>>;
+  negativeLevels: number;
+  baseScores: Record<AbilityKey, number>;
+  currentScores: Record<AbilityKey, number>;
+  setDamage: (k: AbilityKey, n: number) => void;
+  setDrain: (k: AbilityKey, n: number) => void;
+  setNegativeLevels: (n: number) => void;
+  clearAll: () => void;
+}
+
+function AbilityModifiersPanel({
+  abilityDamage, abilityDrain, negativeLevels,
+  baseScores, currentScores,
+  setDamage, setDrain, setNegativeLevels, clearAll,
+}: AbilityModifiersPanelProps) {
+  const hasAny =
+    negativeLevels > 0 ||
+    ABILITY_KEYS.some((k) => (abilityDamage[k] ?? 0) > 0 || (abilityDrain[k] ?? 0) > 0);
+
+  return (
+    <section className="mb-4 border-2 border-ink-700 rounded-md p-3 bg-parchment-100">
+      <div className="flex items-baseline justify-between border-b border-ink-700 mb-2">
+        <h3 className="font-display">Ability Damage, Drain &amp; Negative Levels</h3>
+        {hasAny && (
+          <button className="btn-ghost text-xs no-print" onClick={clearAll}>
+            Clear all
+          </button>
+        )}
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="text-sm w-full">
+          <thead>
+            <tr className="text-xs uppercase tracking-wider text-ink-700">
+              <th className="text-left">Ability</th>
+              <th className="text-right">Base</th>
+              <th className="text-right">Damage</th>
+              <th className="text-right">Drain</th>
+              <th className="text-right">Current</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ABILITY_KEYS.map((k) => {
+              const dmg = abilityDamage[k] ?? 0;
+              const drn = abilityDrain[k] ?? 0;
+              return (
+                <tr key={k} className="border-t border-parchment-300">
+                  <td>{ABILITY_NAMES[k]}</td>
+                  <td className="text-right">{baseScores[k]}</td>
+                  <td className="text-right">
+                    <input
+                      type="number"
+                      min={0}
+                      value={dmg || ""}
+                      placeholder="0"
+                      onChange={(e) => setDamage(k, Number(e.target.value) || 0)}
+                      className="field w-14 text-center text-right no-print"
+                    />
+                    <span className="hidden print:inline">{dmg}</span>
+                  </td>
+                  <td className="text-right">
+                    <input
+                      type="number"
+                      min={0}
+                      value={drn || ""}
+                      placeholder="0"
+                      onChange={(e) => setDrain(k, Number(e.target.value) || 0)}
+                      className="field w-14 text-center text-right no-print"
+                    />
+                    <span className="hidden print:inline">{drn}</span>
+                  </td>
+                  <td className={"text-right font-bold " + (currentScores[k] < baseScores[k] ? "text-rust-600" : "")}>
+                    {currentScores[k]}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mt-3 flex items-center gap-3">
+        <label className="flex items-center gap-2 text-sm">
+          <span className="font-display">Negative Levels:</span>
+          <input
+            type="number"
+            min={0}
+            value={negativeLevels || ""}
+            placeholder="0"
+            onChange={(e) => setNegativeLevels(Number(e.target.value) || 0)}
+            className="field w-16 text-center no-print"
+          />
+          <span className="hidden print:inline font-bold">{negativeLevels}</span>
+        </label>
+        {negativeLevels > 0 && (
+          <span className="text-xs text-rust-600">
+            −{negativeLevels} on attacks, saves, skill &amp; ability checks
+          </span>
+        )}
       </div>
     </section>
   );

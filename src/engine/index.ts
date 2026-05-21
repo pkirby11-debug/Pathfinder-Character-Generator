@@ -10,6 +10,101 @@ import { CLASSES_BY_ID } from "../data/classes/core";
 import { FEATS_BY_ID } from "../data/feats/core";
 import { ITEMS_BY_ID } from "../data/equipment/core";
 import { SKILLS } from "../data/skills/skills";
+import { EFFECTS_BY_ID, type Effect } from "../data/effects/catalog";
+
+// Resolves active effects on a character (from both catalog IDs and inline
+// custom effects) into a single list of Effect definitions.
+export function resolveActiveEffects(character: Character): Effect[] {
+  const out: Effect[] = [];
+  for (const id of character.activeEffectIds ?? []) {
+    const fromCatalog = EFFECTS_BY_ID[id];
+    if (fromCatalog) out.push(fromCatalog);
+    else {
+      const custom = (character.customEffects ?? []).find((e) => e.id === id);
+      if (custom) out.push(custom);
+    }
+  }
+  return out;
+}
+
+// Aggregates modifiers from active effects into one totals object.
+interface EffectTotals {
+  attack: number;
+  meleeAttack: number;
+  rangedAttack: number;
+  damage: number;
+  meleeDamage: number;
+  acBonus: number;
+  armorBonus: number;
+  shieldBonus: number;
+  naturalArmor: number;
+  deflection: number;
+  dodge: number;
+  losesDexToAc: boolean;
+  saves: { fort: number; ref: number; will: number; vsFear: number };
+  skills: number;
+  abilityChecks: number;
+  abilityScores: AbilityScores;
+  initiative: number;
+  cmb: number;
+  cmd: number;
+  speed: number;
+  halfSpeed: boolean;
+  extraAttack: boolean;
+}
+
+function emptyTotals(): EffectTotals {
+  return {
+    attack: 0, meleeAttack: 0, rangedAttack: 0,
+    damage: 0, meleeDamage: 0,
+    acBonus: 0, armorBonus: 0, shieldBonus: 0, naturalArmor: 0, deflection: 0, dodge: 0,
+    losesDexToAc: false,
+    saves: { fort: 0, ref: 0, will: 0, vsFear: 0 },
+    skills: 0, abilityChecks: 0,
+    abilityScores: { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
+    initiative: 0, cmb: 0, cmd: 0, speed: 0,
+    halfSpeed: false, extraAttack: false,
+  };
+}
+
+function aggregateEffectTotals(effects: Effect[]): EffectTotals {
+  const t = emptyTotals();
+  for (const e of effects) {
+    t.attack += e.attack ?? 0;
+    t.meleeAttack += e.meleeAttack ?? 0;
+    t.rangedAttack += e.rangedAttack ?? 0;
+    t.damage += e.damage ?? 0;
+    t.meleeDamage += e.meleeDamage ?? 0;
+    t.acBonus += e.acBonus ?? 0;
+    t.armorBonus += e.armorBonus ?? 0;
+    t.shieldBonus += e.shieldBonus ?? 0;
+    t.naturalArmor += e.naturalArmor ?? 0;
+    t.deflection += e.deflection ?? 0;
+    t.dodge += e.dodge ?? 0;
+    if (e.losesDexToAc) t.losesDexToAc = true;
+    if (e.saves) {
+      t.saves.fort += (e.saves.fort ?? 0) + (e.saves.all ?? 0);
+      t.saves.ref += (e.saves.ref ?? 0) + (e.saves.all ?? 0);
+      t.saves.will += (e.saves.will ?? 0) + (e.saves.all ?? 0);
+      t.saves.vsFear += e.saves.vsFear ?? 0;
+    }
+    t.skills += e.skills ?? 0;
+    t.abilityChecks += e.abilityChecks ?? 0;
+    if (e.abilityScores) {
+      for (const k of ABILITY_KEYS) {
+        const m = e.abilityScores[k];
+        if (typeof m === "number") t.abilityScores[k] += m;
+      }
+    }
+    t.initiative += e.initiative ?? 0;
+    t.cmb += e.cmb ?? 0;
+    t.cmd += e.cmd ?? 0;
+    t.speed += e.speed ?? 0;
+    if (e.halfSpeed) t.halfSpeed = true;
+    if (e.extraAttack) t.extraAttack = true;
+  }
+  return t;
+}
 
 export const SIZE_MODIFIER: Record<Size, number> = {
   Fine: 8,
@@ -108,6 +203,21 @@ export function derive(character: Character): DerivedStats {
     }
   }
 
+  // --- Active effects, ability damage/drain, negative levels ---
+  const activeEffects = resolveActiveEffects(character);
+  const effectTotals = aggregateEffectTotals(activeEffects);
+  const negativeLevels = character.negativeLevels ?? 0;
+
+  // Ability scores: base + effects + drain/damage
+  const baseAbilityScores: AbilityScores = { ...abilityScores };
+  for (const k of ABILITY_KEYS) {
+    abilityScores[k] += effectTotals.abilityScores[k];
+    abilityScores[k] -= character.abilityDamage?.[k] ?? 0;
+    abilityScores[k] -= character.abilityDrain?.[k] ?? 0;
+    // Ability scores can drop to 0 (treated as helpless for Str/Dex); don't go negative.
+    if (abilityScores[k] < 0) abilityScores[k] = 0;
+  }
+
   const abilityMods: AbilityScores = ABILITY_KEYS.reduce(
     (acc, k) => ({ ...acc, [k]: abilityMod(abilityScores[k]) }),
     {} as AbilityScores,
@@ -172,8 +282,8 @@ export function derive(character: Character): DerivedStats {
   const speed = race?.speed ?? 30;
 
   // --- AC ---
-  let armorBonus = 0;
-  let shieldBonus = 0;
+  let armorBonus = effectTotals.armorBonus;
+  let shieldBonus = effectTotals.shieldBonus;
   let maxDexAllowed = Infinity;
 
   for (const carried of character.inventory) {
@@ -190,13 +300,14 @@ export function derive(character: Character): DerivedStats {
       if (a.maxDex !== null) maxDexAllowed = Math.min(maxDexAllowed, a.maxDex);
     }
   }
-  const dexToAc = Math.min(abilityMods.dex, maxDexAllowed);
-  const naturalArmor = 0;
-  const deflection = 0;
-  const misc = 0;
+  const rawDexToAc = Math.min(abilityMods.dex, maxDexAllowed);
+  const dexToAc = effectTotals.losesDexToAc ? 0 : rawDexToAc;
+  const naturalArmor = effectTotals.naturalArmor;
+  const deflection = effectTotals.deflection;
+  const misc = effectTotals.acBonus + effectTotals.dodge;
   const acTotal = 10 + armorBonus + shieldBonus + dexToAc + sizeMod + naturalArmor + deflection + misc;
-  const acTouch = 10 + dexToAc + sizeMod + deflection + misc;
-  const acFlatFooted = 10 + armorBonus + shieldBonus + sizeMod + naturalArmor + deflection + misc;
+  const acTouch = 10 + dexToAc + sizeMod + deflection + effectTotals.acBonus + effectTotals.dodge;
+  const acFlatFooted = 10 + armorBonus + shieldBonus + sizeMod + naturalArmor + deflection + effectTotals.acBonus;
 
   // --- Saves total ---
   const ironWillMisc = allFeats.includes("iron_will") ? 2 : 0;
@@ -207,20 +318,20 @@ export function derive(character: Character): DerivedStats {
     fort: {
       base: saveBaseTotals.fort,
       ability: abilityMods.con,
-      misc: greatFortMisc,
-      total: saveBaseTotals.fort + abilityMods.con + greatFortMisc,
+      misc: greatFortMisc + effectTotals.saves.fort - negativeLevels,
+      total: saveBaseTotals.fort + abilityMods.con + greatFortMisc + effectTotals.saves.fort - negativeLevels,
     },
     ref: {
       base: saveBaseTotals.ref,
       ability: abilityMods.dex,
-      misc: lightRefMisc,
-      total: saveBaseTotals.ref + abilityMods.dex + lightRefMisc,
+      misc: lightRefMisc + effectTotals.saves.ref - negativeLevels,
+      total: saveBaseTotals.ref + abilityMods.dex + lightRefMisc + effectTotals.saves.ref - negativeLevels,
     },
     will: {
       base: saveBaseTotals.will,
       ability: abilityMods.wis,
-      misc: ironWillMisc,
-      total: saveBaseTotals.will + abilityMods.wis + ironWillMisc,
+      misc: ironWillMisc + effectTotals.saves.will - negativeLevels,
+      total: saveBaseTotals.will + abilityMods.wis + ironWillMisc + effectTotals.saves.will - negativeLevels,
     },
   };
 
@@ -239,11 +350,12 @@ export function derive(character: Character): DerivedStats {
     const isClassSkill = isSkillAClassSkill(skill.id, character);
     const classSkillBonus = ranks > 0 && isClassSkill ? 3 : 0;
     const abilityBonus = abilityMods[skill.ability];
+    const skillEffectBonus = effectTotals.skills - negativeLevels;
     skills[skill.id] = {
       ranks,
       classSkillBonus,
       ability: abilityBonus,
-      total: ranks + classSkillBonus + abilityBonus,
+      total: ranks + classSkillBonus + abilityBonus + skillEffectBonus,
       trained: ranks > 0,
     };
   }
@@ -270,13 +382,20 @@ export function derive(character: Character): DerivedStats {
     heavy: Math.floor(heavyLoad),
   };
 
+  // Common attack-roll adjustment from effects + negative levels.
+  const attackEffectMod = effectTotals.attack - negativeLevels;
+  const finalSpeed = effectTotals.halfSpeed
+    ? Math.floor((speed + effectTotals.speed) / 2 / 5) * 5
+    : speed + effectTotals.speed;
+
   return {
     totalLevel,
     abilityScores,
+    baseAbilityScores,
     abilityMods,
     bab,
-    cmb: bab + abilityMods.str + cmbSizeMod,
-    cmd: 10 + bab + abilityMods.str + abilityMods.dex + cmbSizeMod,
+    cmb: bab + abilityMods.str + cmbSizeMod + effectTotals.cmb - negativeLevels,
+    cmd: 10 + bab + abilityMods.str + abilityMods.dex + cmbSizeMod + effectTotals.cmd - negativeLevels,
     saves,
     ac: {
       total: acTotal,
@@ -291,19 +410,30 @@ export function derive(character: Character): DerivedStats {
       misc,
     },
     hp: { max: maxHp, current: character.currentHp ?? maxHp },
-    initiative: abilityMods.dex + initImproved,
-    speed,
+    initiative: abilityMods.dex + initImproved + effectTotals.initiative,
+    speed: finalSpeed,
     size,
     sizeMod,
     skills,
     attacks: {
-      melee: bab + abilityMods.str + sizeMod,
-      ranged: bab + abilityMods.dex + sizeMod,
-      cmb: bab + abilityMods.str + cmbSizeMod,
+      melee: bab + abilityMods.str + sizeMod + attackEffectMod + effectTotals.meleeAttack,
+      ranged: bab + abilityMods.dex + sizeMod + attackEffectMod + effectTotals.rangedAttack,
+      cmb: bab + abilityMods.str + cmbSizeMod + effectTotals.cmb - negativeLevels,
     },
     carryingCapacity,
     spellsPerDay,
     bonusSpellsByAbility,
+    activeEffects,
+    effectTotals: {
+      attack: attackEffectMod + effectTotals.meleeAttack, // approximate display
+      damage: effectTotals.damage + effectTotals.meleeDamage,
+      saves: { fort: effectTotals.saves.fort, ref: effectTotals.saves.ref, will: effectTotals.saves.will },
+      ac: effectTotals.acBonus + effectTotals.dodge + effectTotals.armorBonus + effectTotals.shieldBonus + effectTotals.naturalArmor + effectTotals.deflection,
+      skills: effectTotals.skills - negativeLevels,
+      speed: effectTotals.halfSpeed ? -Math.floor(speed / 2) : effectTotals.speed,
+      negativeLevels,
+      extraAttack: effectTotals.extraAttack,
+    },
   };
 }
 

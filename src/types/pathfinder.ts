@@ -250,12 +250,20 @@ export interface Character {
   currentHp?: number; // undefined = at full
   tempHp?: number;
   nonlethalDamage?: number;
+  // Active effects: IDs from the effects catalog plus any custom effects on this character.
+  activeEffectIds?: string[];
+  customEffects?: import("../data/effects/catalog").Effect[];
+  // Ability damage (temporary) and drain (permanent) per stat.
+  abilityDamage?: Partial<AbilityScores>;
+  abilityDrain?: Partial<AbilityScores>;
+  negativeLevels?: number;
 }
 
 // Computed/derived stats produced by the engine
 export interface DerivedStats {
   totalLevel: number;
-  abilityScores: AbilityScores; // after racial + level-up bonuses
+  abilityScores: AbilityScores; // after racial + level-up + effects - damage/drain
+  baseAbilityScores?: AbilityScores; // after racial + level-up only (pre-effects/damage)
   abilityMods: AbilityScores;
   bab: number;
   cmb: number;
@@ -287,4 +295,15 @@ export interface DerivedStats {
   carryingCapacity: { light: number; medium: number; heavy: number };
   spellsPerDay: Record<string, number[]>; // by classId -> [lvl0, lvl1, ...]
   bonusSpellsByAbility: Record<string, number[]>; // by classId
+  activeEffects?: import("../data/effects/catalog").Effect[];
+  effectTotals?: {
+    attack: number;
+    damage: number;
+    saves: { fort: number; ref: number; will: number };
+    ac: number;
+    skills: number;
+    speed: number;
+    negativeLevels: number;
+    extraAttack: boolean;
+  };
 }
