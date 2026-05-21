@@ -15,6 +15,7 @@ import {
   pointBuyTotal,
   skillRanksAtLevel,
 } from "../engine";
+import { spellDC, spellDamage, spellReferenceUrl, hasSavingThrow } from "../engine/spells";
 
 type Step = "basics" | "abilities" | "race" | "class" | "skills" | "feats" | "spells" | "equipment" | "review";
 
@@ -629,11 +630,14 @@ function SpellsStep({ draft, update }: { draft: Character; update: (p: Partial<C
   const casters = draft.classLevels
     .map((cl) => ({ cl, klass: CLASSES_BY_ID[cl.classId] }))
     .filter((x) => x.klass?.spellcasting);
+  const [filter, setFilter] = useState("");
+  const [levelFilter, setLevelFilter] = useState<number | "all">("all");
 
   if (casters.length === 0) {
     return <p className="font-flavor">No spellcasting classes in this build.</p>;
   }
 
+  const derived = derive(draft);
   const known = draft.knownSpells ?? [];
   const toggle = (classId: string, spellId: string, spellLevel: number) => {
     const exists = known.find((k) => k.classId === classId && k.spellId === spellId);
@@ -648,36 +652,102 @@ function SpellsStep({ draft, update }: { draft: Character; update: (p: Partial<C
     <div className="space-y-6">
       <h2 className="text-2xl">Spells Known / Prepared</h2>
       <p className="text-sm text-ink-700 font-flavor">
-        Pick spells your character knows. Prepared casters can choose freely each day; spontaneous casters are limited to their spells known list.
+        Pick spells your character knows. Save DC and damage are scaled to your current caster level. Click "Look up" to open the full description on Archives of Nethys.
       </p>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          className="field w-full max-w-xs text-sm"
+          placeholder="Search spell name…"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+        />
+        <span className="text-xs text-ink-700">Level:</span>
+        <select
+          className="field text-sm"
+          value={levelFilter === "all" ? "all" : String(levelFilter)}
+          onChange={(e) =>
+            setLevelFilter(e.target.value === "all" ? "all" : Number(e.target.value))
+          }
+        >
+          <option value="all">All</option>
+          {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+            <option key={n} value={n}>{n}</option>
+          ))}
+        </select>
+      </div>
 
       {casters.map(({ cl, klass }) => {
         if (!klass?.spellcasting) return null;
-        const spellsForList = CORE_SPELLS.filter((s) => s.levels[klass.spellcasting!.list] !== undefined);
+        const listKey = klass.spellcasting.list;
+        const spellsForList = CORE_SPELLS
+          .filter((s) => s.levels[listKey] !== undefined && s.levels[listKey] !== null)
+          .filter((s) => (levelFilter === "all" ? true : s.levels[listKey] === levelFilter))
+          .filter((s) => (filter ? s.name.toLowerCase().includes(filter.toLowerCase()) : true))
+          .sort((a, b) => {
+            const al = a.levels[listKey]!;
+            const bl = b.levels[listKey]!;
+            return al - bl || a.name.localeCompare(b.name);
+          });
+
+        const knownCount = known.filter((k) => k.classId === cl.classId).length;
+
         return (
           <div key={cl.classId} className="border border-ink-700 rounded-md p-3 bg-parchment-100">
-            <h3 className="text-lg">{klass.name} ({klass.spellcasting.type})</h3>
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h3 className="text-lg">
+                {klass.name}{" "}
+                <span className="text-sm text-ink-700">
+                  (CL {cl.level}, {klass.spellcasting.type}, {klass.spellcasting.ability.toUpperCase()})
+                </span>
+              </h3>
+              <span className="text-xs text-ink-700">
+                {knownCount} selected · {spellsForList.length} available
+              </span>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
               {spellsForList.map((s) => {
-                const lvl = s.levels[klass.spellcasting!.list]!;
+                const lvl = s.levels[listKey]!;
                 const picked = known.some((k) => k.classId === cl.classId && k.spellId === s.id);
+                const dc = spellDC(s, derived, cl.classId);
+                const dmg = spellDamage(s.id, cl.level);
+                const hasSave = hasSavingThrow(s);
                 return (
-                  <button
+                  <div
                     key={s.id}
-                    onClick={() => toggle(cl.classId, s.id, lvl)}
                     className={
-                      "text-left p-2 rounded border-2 text-sm " +
+                      "p-2 rounded border-2 text-sm flex flex-col " +
                       (picked
                         ? "border-rust-600 bg-parchment-50"
                         : "border-ink-700 bg-parchment-50 hover:border-rust-600")
                     }
                   >
-                    <div className="flex justify-between">
-                      <span className="font-display">{s.name}</span>
-                      <span className="text-xs">L{lvl} · {s.school}</span>
+                    <button
+                      type="button"
+                      onClick={() => toggle(cl.classId, s.id, lvl)}
+                      className="text-left"
+                    >
+                      <div className="flex justify-between">
+                        <span className="font-display">{s.name}</span>
+                        <span className="text-xs">L{lvl} · {s.school}</span>
+                      </div>
+                      <p className="text-xs mt-1 line-clamp-2">{s.description}</p>
+                    </button>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-700">
+                      {hasSave && dc !== null && <span><strong>DC {dc}</strong></span>}
+                      {dmg && <span><strong>{dmg}</strong></span>}
+                      {s.savingThrow && hasSave && <span className="text-ink-700">({s.savingThrow})</span>}
+                      <a
+                        href={spellReferenceUrl(s)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="ml-auto text-rust-600 hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Look up ↗
+                      </a>
                     </div>
-                    <p className="text-xs mt-1 line-clamp-2">{s.description}</p>
-                  </button>
+                  </div>
                 );
               })}
             </div>

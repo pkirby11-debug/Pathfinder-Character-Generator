@@ -9,6 +9,7 @@ import { SPELLS_BY_ID } from "../data/spells/core";
 import { SKILLS } from "../data/skills/skills";
 import { ABILITY_KEYS, ABILITY_NAMES, type AbilityKey } from "../types/pathfinder";
 import { abilityModString, derive } from "../engine";
+import { spellDC, spellDamage, spellReferenceUrl, hasSavingThrow } from "../engine/spells";
 import { CONDITIONS, SPELL_BUFFS, EFFECTS_BY_ID, type Effect } from "../data/effects/catalog";
 
 export function CharacterSheet() {
@@ -323,11 +324,14 @@ export function CharacterSheet() {
               if (!klass?.spellcasting) return null;
               const bonus = d.bonusSpellsByAbility[classId] ?? [];
               const knownForClass = (character.knownSpells ?? []).filter((k) => k.classId === classId);
+              const cl = character.classLevels.find((c) => c.classId === classId);
+              const casterLevel = cl?.level ?? 1;
               return (
-                <div key={classId} className="mb-2">
+                <div key={classId} className="mb-3">
                   <h4 className="font-display">{klass.name}</h4>
                   <p className="text-xs text-ink-700">
-                    Casting ability: {klass.spellcasting.ability.toUpperCase()} ({klass.spellcasting.type})
+                    Casting ability: {klass.spellcasting.ability.toUpperCase()} ·
+                    {" "}{klass.spellcasting.type} · CL {casterLevel}
                   </p>
                   <table className="text-sm w-full max-w-md mt-1">
                     <thead>
@@ -335,6 +339,7 @@ export function CharacterSheet() {
                         <th className="text-left">Lvl</th>
                         <th className="text-right">Per Day</th>
                         <th className="text-right">Bonus</th>
+                        <th className="text-right">Save DC</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -344,21 +349,45 @@ export function CharacterSheet() {
                             <td>{lvl}</td>
                             <td className="text-right">{n}</td>
                             <td className="text-right">{bonus[lvl] ? `+${bonus[lvl]}` : "—"}</td>
+                            <td className="text-right">
+                              {10 + lvl + d.abilityMods[klass.spellcasting!.ability]}
+                            </td>
                           </tr>
                         ) : null,
                       )}
                     </tbody>
                   </table>
                   {knownForClass.length > 0 && (
-                    <ul className="text-sm mt-2 list-disc ml-5">
-                      {knownForClass.map((k) => {
-                        const s = SPELLS_BY_ID[k.spellId];
-                        return s ? (
-                          <li key={k.spellId}>
-                            <strong>{s.name}</strong> (lvl {k.level}) — {s.school}
-                          </li>
-                        ) : null;
-                      })}
+                    <ul className="text-sm mt-2 space-y-0.5">
+                      {knownForClass
+                        .slice()
+                        .sort((a, b) => a.level - b.level || a.spellId.localeCompare(b.spellId))
+                        .map((k) => {
+                          const s = SPELLS_BY_ID[k.spellId];
+                          if (!s) return null;
+                          const dc = spellDC(s, d, classId);
+                          const dmg = spellDamage(s.id, casterLevel);
+                          const save = hasSavingThrow(s);
+                          return (
+                            <li key={k.spellId} className="flex flex-wrap items-baseline gap-x-2">
+                              <span className="text-xs text-ink-700">L{k.level}</span>
+                              <strong>{s.name}</strong>
+                              <span className="text-xs text-ink-700">{s.school}</span>
+                              {save && dc !== null && (
+                                <span className="text-xs">DC <strong>{dc}</strong></span>
+                              )}
+                              {dmg && <span className="text-xs">→ <strong>{dmg}</strong></span>}
+                              <a
+                                href={spellReferenceUrl(s)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-rust-600 hover:underline no-print ml-auto"
+                              >
+                                Look up ↗
+                              </a>
+                            </li>
+                          );
+                        })}
                     </ul>
                   )}
                 </div>
