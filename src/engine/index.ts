@@ -137,17 +137,16 @@ export function derive(character: Character): DerivedStats {
   for (const cl of character.classLevels) {
     const klass = CLASSES_BY_ID[cl.classId];
     if (!klass) continue;
-    // The first level always uses the max of the hit die. Subsequent levels use rolled values.
+    // The first level of the first class always uses the max of the hit die.
+    // All other levels use the per-level roll, or fall back to average.
     for (let lvl = 1; lvl <= cl.level; lvl++) {
-      const isFirstLevelEver =
-        cl === character.classLevels[0] && lvl === 1;
+      const isFirstLevelEver = cl === character.classLevels[0] && lvl === 1;
       if (isFirstLevelEver) {
         maxHp += klass.hitDie;
       } else {
-        // Use rolled value if present, else average (rounded up).
-        const rolledForLevel = cl.hitPointsRolled; // simplification: same roll per cl-level entry
+        const roll = cl.hpRolls?.[lvl - 1];
         const avg = Math.floor(klass.hitDie / 2) + 1;
-        maxHp += rolledForLevel || avg;
+        maxHp += roll ?? avg;
       }
     }
   }
@@ -291,7 +290,7 @@ export function derive(character: Character): DerivedStats {
       deflection,
       misc,
     },
-    hp: { max: maxHp, current: maxHp },
+    hp: { max: maxHp, current: character.currentHp ?? maxHp },
     initiative: abilityMods.dex + initImproved,
     speed,
     size,

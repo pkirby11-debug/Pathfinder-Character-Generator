@@ -349,10 +349,37 @@ function ClassStep({ draft, update }: { draft: Character; update: (p: Partial<Ch
     } else {
       update({
         classLevels: draft.classLevels.map((cl) =>
-          cl.classId === classId ? { ...cl, level: cl.level - 1 } : cl,
+          cl.classId === classId
+            ? { ...cl, level: cl.level - 1, hpRolls: cl.hpRolls?.slice(0, cl.level - 1) }
+            : cl,
         ),
       });
     }
+  };
+
+  const setHpRoll = (classId: string, levelIdx: number, value: number) => {
+    update({
+      classLevels: draft.classLevels.map((cl) => {
+        if (cl.classId !== classId) return cl;
+        const next = [...(cl.hpRolls ?? [])];
+        next[levelIdx] = value;
+        return { ...cl, hpRolls: next };
+      }),
+    });
+  };
+
+  const fillHpRolls = (classId: string, mode: "average" | "max") => {
+    update({
+      classLevels: draft.classLevels.map((cl) => {
+        if (cl.classId !== classId) return cl;
+        const klass = CLASSES_BY_ID[cl.classId];
+        if (!klass) return cl;
+        const avg = Math.floor(klass.hitDie / 2) + 1;
+        const value = mode === "max" ? klass.hitDie : avg;
+        const rolls = Array.from({ length: cl.level }, () => value);
+        return { ...cl, hpRolls: rolls };
+      }),
+    });
   };
 
   return (
@@ -360,20 +387,57 @@ function ClassStep({ draft, update }: { draft: Character; update: (p: Partial<Ch
       <h2 className="text-2xl">Classes & Levels</h2>
 
       {draft.classLevels.length > 0 && (
-        <div className="space-y-2">
+        <div className="space-y-3">
           <h3 className="text-lg">Current build</h3>
-          {draft.classLevels.map((cl) => {
+          {draft.classLevels.map((cl, classIdx) => {
             const klass = CLASSES_BY_ID[cl.classId];
             if (!klass) return null;
+            const avg = Math.floor(klass.hitDie / 2) + 1;
             return (
-              <div key={cl.classId} className="flex items-center justify-between bg-parchment-100 border border-ink-700 rounded-md p-3">
-                <div>
-                  <span className="font-display">{klass.name}</span>{" "}
-                  <span className="text-sm">level {cl.level}</span>
+              <div key={cl.classId} className="bg-parchment-100 border border-ink-700 rounded-md p-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="font-display">{klass.name}</span>{" "}
+                    <span className="text-sm">level {cl.level}</span>{" "}
+                    <span className="text-xs text-ink-700">(d{klass.hitDie}, avg {avg})</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button className="btn-ghost text-xs" onClick={() => removeLevel(cl.classId)}>−1 level</button>
+                    <button className="btn-secondary text-xs" onClick={() => addClass(cl.classId)}>+1 level</button>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <button className="btn-ghost text-xs" onClick={() => removeLevel(cl.classId)}>−1 level</button>
-                  <button className="btn-secondary text-xs" onClick={() => addClass(cl.classId)}>+1 level</button>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                  <span className="uppercase tracking-wider text-ink-700">HP per level:</span>
+                  {Array.from({ length: cl.level }).map((_, i) => {
+                    const lvl = i + 1;
+                    const isFirstChar = classIdx === 0 && lvl === 1;
+                    if (isFirstChar) {
+                      return (
+                        <div key={i} className="flex items-center gap-1">
+                          <span>L{lvl}</span>
+                          <span className="px-2 py-0.5 bg-parchment-200 border border-ink-700 rounded">
+                            {klass.hitDie} max
+                          </span>
+                        </div>
+                      );
+                    }
+                    const value = cl.hpRolls?.[i] ?? avg;
+                    return (
+                      <div key={i} className="flex items-center gap-1">
+                        <span>L{lvl}</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={klass.hitDie}
+                          value={value}
+                          className="w-12 field text-center"
+                          onChange={(e) => setHpRoll(cl.classId, i, Number(e.target.value) || avg)}
+                        />
+                      </div>
+                    );
+                  })}
+                  <button className="btn-ghost text-xs" onClick={() => fillHpRolls(cl.classId, "average")}>Avg all</button>
+                  <button className="btn-ghost text-xs" onClick={() => fillHpRolls(cl.classId, "max")}>Max all</button>
                 </div>
               </div>
             );

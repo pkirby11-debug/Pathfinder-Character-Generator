@@ -212,7 +212,8 @@ export interface CarriedItem {
 export interface ClassLevel {
   classId: string;
   level: number; // class level (1-20)
-  hitPointsRolled: number; // HP gained at this class level (already includes con/etc choices? no — just the rolled die)
+  hitPointsRolled: number; // legacy, retained for backward-compat; new code uses hpRolls
+  hpRolls?: number[]; // HP gained at each level of this class entry, indexed by level-1
   skillRanks: Record<SkillKey, number>; // ranks placed at THIS level
   chosenFeats?: string[]; // feats picked at this level (1, 3, 5, 7, ...)
   abilityScoreIncrease?: AbilityKey; // every 4 levels
@@ -245,6 +246,10 @@ export interface Character {
   knownSpells?: { classId: string; spellId: string; level: number }[];
   notes?: string;
   conditions?: string[];
+  // Live-play tracking (mutable during a session)
+  currentHp?: number; // undefined = at full
+  tempHp?: number;
+  nonlethalDamage?: number;
 }
 
 // Computed/derived stats produced by the engine

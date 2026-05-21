@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useCharacterStore } from "../store/characters";
 import { RACES_BY_ID } from "../data/races/core";
@@ -9,9 +10,21 @@ import { SKILLS } from "../data/skills/skills";
 import { ABILITY_KEYS, ABILITY_NAMES } from "../types/pathfinder";
 import { abilityModString, derive } from "../engine";
 
+// Standard Pathfinder 1E conditions (OGL).
+const COMMON_CONDITIONS = [
+  "Blinded", "Confused", "Dazed", "Dazzled", "Deafened", "Disabled",
+  "Dying", "Entangled", "Exhausted", "Fascinated", "Fatigued",
+  "Flat-Footed", "Frightened", "Grappled", "Helpless", "Nauseated",
+  "Panicked", "Paralyzed", "Pinned", "Prone", "Shaken", "Sickened",
+  "Stable", "Staggered", "Stunned", "Unconscious",
+];
+
 export function CharacterSheet() {
   const { id } = useParams();
   const character = useCharacterStore((s) => s.characters.find((c) => c.id === id));
+  const updateCharacter = useCharacterStore((s) => s.update);
+  const [hpDelta, setHpDelta] = useState<string>("");
+  const [customCondition, setCustomCondition] = useState("");
 
   if (!character) {
     return (
@@ -68,10 +81,29 @@ export function CharacterSheet() {
         </section>
 
         <section className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-          <Block title="Hit Points">
-            <div className="text-3xl font-bold">{d.hp.max}</div>
-            <div className="text-xs text-ink-700">max</div>
-          </Block>
+          <HpTracker
+            current={d.hp.current}
+            max={d.hp.max}
+            temp={character.tempHp ?? 0}
+            nonlethal={character.nonlethalDamage ?? 0}
+            hpDelta={hpDelta}
+            setHpDelta={setHpDelta}
+            applyDamage={(n) =>
+              updateCharacter(character.id, {
+                currentHp: Math.max(-d.hp.max, d.hp.current - n),
+              })
+            }
+            applyHeal={(n) =>
+              updateCharacter(character.id, {
+                currentHp: Math.min(d.hp.max, d.hp.current + n),
+              })
+            }
+            healToFull={() => updateCharacter(character.id, { currentHp: d.hp.max })}
+            setTemp={(n) => updateCharacter(character.id, { tempHp: Math.max(0, n) })}
+            setNonlethal={(n) =>
+              updateCharacter(character.id, { nonlethalDamage: Math.max(0, n) })
+            }
+          />
           <Block title="Armor Class">
             <div className="text-3xl font-bold">{d.ac.total}</div>
             <div className="text-xs text-ink-700">
@@ -82,6 +114,26 @@ export function CharacterSheet() {
             <div className="text-3xl font-bold">{abilityModString(d.initiative)}</div>
           </Block>
         </section>
+
+        <ConditionsPanel
+          active={character.conditions ?? []}
+          custom={customCondition}
+          setCustom={setCustomCondition}
+          toggle={(c) => {
+            const set = new Set(character.conditions ?? []);
+            if (set.has(c)) set.delete(c);
+            else set.add(c);
+            updateCharacter(character.id, { conditions: Array.from(set) });
+          }}
+          addCustom={() => {
+            const v = customCondition.trim();
+            if (!v) return;
+            const set = new Set(character.conditions ?? []);
+            set.add(v);
+            updateCharacter(character.id, { conditions: Array.from(set) });
+            setCustomCondition("");
+          }}
+        />
 
         <section className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
           <Block title="BAB">
@@ -304,5 +356,211 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
       <div className="text-xs font-display uppercase tracking-wider text-ink-700">{title}</div>
       <div className="mt-1">{children}</div>
     </div>
+  );
+}
+
+interface HpTrackerProps {
+  current: number;
+  max: number;
+  temp: number;
+  nonlethal: number;
+  hpDelta: string;
+  setHpDelta: (v: string) => void;
+  applyDamage: (n: number) => void;
+  applyHeal: (n: number) => void;
+  healToFull: () => void;
+  setTemp: (n: number) => void;
+  setNonlethal: (n: number) => void;
+}
+
+function HpTracker({
+  current,
+  max,
+  temp,
+  nonlethal,
+  hpDelta,
+  setHpDelta,
+  applyDamage,
+  applyHeal,
+  healToFull,
+  setTemp,
+  setNonlethal,
+}: HpTrackerProps) {
+  const parsed = Number(hpDelta) || 0;
+  const ratio = max > 0 ? Math.max(0, Math.min(1, current / max)) : 0;
+  const barColor =
+    ratio > 0.66 ? "bg-emerald-600" : ratio > 0.33 ? "bg-amber-500" : "bg-rust-600";
+  const status =
+    current <= -10
+      ? "DEAD"
+      : current < 0
+      ? "DYING"
+      : current === 0
+      ? "DISABLED"
+      : current <= max / 4
+      ? "BLOODIED"
+      : null;
+
+  return (
+    <div className="border-2 border-ink-700 rounded-md p-3 bg-parchment-100">
+      <div className="flex items-baseline justify-between">
+        <div className="text-xs font-display uppercase tracking-wider text-ink-700">Hit Points</div>
+        {status && (
+          <span className="text-xs font-bold text-rust-600 no-print">{status}</span>
+        )}
+      </div>
+      <div className="flex items-baseline justify-center gap-2 mt-1">
+        <span className="text-4xl font-bold">{current}</span>
+        <span className="text-lg text-ink-700">/ {max}</span>
+      </div>
+      <div className="w-full h-2 bg-parchment-300 border border-ink-700 rounded-full mt-2 overflow-hidden">
+        <div
+          className={`h-full ${barColor} transition-all`}
+          style={{ width: `${ratio * 100}%` }}
+        />
+      </div>
+      {(temp > 0 || nonlethal > 0) && (
+        <div className="text-xs mt-1 flex justify-center gap-3">
+          {temp > 0 && <span className="text-emerald-700">+{temp} temp</span>}
+          {nonlethal > 0 && <span className="text-amber-700">{nonlethal} nonlethal</span>}
+        </div>
+      )}
+      <div className="no-print mt-3 space-y-1">
+        <div className="flex gap-1">
+          <input
+            type="number"
+            value={hpDelta}
+            placeholder="amount"
+            onChange={(e) => setHpDelta(e.target.value)}
+            className="field text-center flex-1 min-w-0"
+          />
+          <button
+            className="btn-secondary text-xs"
+            onClick={() => {
+              if (parsed > 0) {
+                applyDamage(parsed);
+                setHpDelta("");
+              }
+            }}
+            title="Subtract from current HP"
+          >
+            − Damage
+          </button>
+          <button
+            className="btn-secondary text-xs"
+            onClick={() => {
+              if (parsed > 0) {
+                applyHeal(parsed);
+                setHpDelta("");
+              }
+            }}
+            title="Add to current HP"
+          >
+            + Heal
+          </button>
+        </div>
+        <div className="flex gap-2 items-center justify-center text-xs">
+          <button className="btn-ghost text-xs px-2 py-0.5" onClick={healToFull}>
+            Full
+          </button>
+          <label className="flex items-center gap-1">
+            Temp
+            <input
+              type="number"
+              value={temp || ""}
+              placeholder="0"
+              onChange={(e) => setTemp(Number(e.target.value) || 0)}
+              className="field w-14 text-center"
+            />
+          </label>
+          <label className="flex items-center gap-1">
+            Nonlethal
+            <input
+              type="number"
+              value={nonlethal || ""}
+              placeholder="0"
+              onChange={(e) => setNonlethal(Number(e.target.value) || 0)}
+              className="field w-14 text-center"
+            />
+          </label>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface ConditionsPanelProps {
+  active: string[];
+  custom: string;
+  setCustom: (v: string) => void;
+  toggle: (c: string) => void;
+  addCustom: () => void;
+}
+
+function ConditionsPanel({ active, custom, setCustom, toggle, addCustom }: ConditionsPanelProps) {
+  const activeSet = new Set(active);
+  const customActive = active.filter((c) => !COMMON_CONDITIONS.includes(c));
+
+  return (
+    <section className="mb-4">
+      <div className="flex items-baseline justify-between border-b border-ink-700 mb-2">
+        <h3 className="font-display">Conditions</h3>
+        {active.length > 0 && (
+          <span className="text-xs text-ink-700">{active.length} active</span>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {COMMON_CONDITIONS.map((c) => {
+          const on = activeSet.has(c);
+          return (
+            <button
+              key={c}
+              onClick={() => toggle(c)}
+              className={
+                "text-xs px-2 py-1 rounded border transition-colors no-print " +
+                (on
+                  ? "bg-rust-600 text-parchment-50 border-rust-700"
+                  : "bg-parchment-50 text-ink-800 border-ink-700 hover:bg-parchment-200")
+              }
+            >
+              {c}
+            </button>
+          );
+        })}
+      </div>
+      {customActive.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-2">
+          {customActive.map((c) => (
+            <button
+              key={c}
+              onClick={() => toggle(c)}
+              className="text-xs px-2 py-1 rounded bg-rust-600 text-parchment-50 border border-rust-700 no-print"
+              title="Click to remove"
+            >
+              {c} ✕
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="mt-2 flex gap-1 no-print">
+        <input
+          type="text"
+          value={custom}
+          placeholder="Add custom condition…"
+          onChange={(e) => setCustom(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") addCustom();
+          }}
+          className="field w-full max-w-xs text-sm"
+        />
+        <button className="btn-secondary text-xs" onClick={addCustom}>
+          Add
+        </button>
+      </div>
+      {/* Print-only summary: active conditions inline */}
+      <div className="hidden print:block text-sm">
+        {active.length === 0 ? <em>None</em> : active.join(", ")}
+      </div>
+    </section>
   );
 }
