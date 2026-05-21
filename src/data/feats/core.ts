@@ -1,0 +1,70 @@
+import type { Feat } from "../../types/pathfinder";
+
+// A representative selection of Pathfinder 1E Core Rulebook feats (OGL).
+// The schema accepts the full ~700+ catalog; we seed the most-picked options here.
+export const CORE_FEATS: Feat[] = [
+  // --- General ---
+  { id: "alertness", name: "Alertness", source: "Core Rulebook", types: ["general"], benefit: "+2 bonus on Perception and Sense Motive checks. If you have 10 or more ranks in either, the bonus increases to +4." },
+  { id: "athletic", name: "Athletic", source: "Core Rulebook", types: ["general"], benefit: "+2 bonus on Climb and Swim checks. +4 if 10+ ranks in either." },
+  { id: "acrobatic", name: "Acrobatic", source: "Core Rulebook", types: ["general"], benefit: "+2 bonus on Acrobatics and Fly checks. +4 if 10+ ranks in either." },
+  { id: "deceitful", name: "Deceitful", source: "Core Rulebook", types: ["general"], benefit: "+2 bonus on Bluff and Disguise checks. +4 if 10+ ranks in either." },
+  { id: "deft_hands", name: "Deft Hands", source: "Core Rulebook", types: ["general"], benefit: "+2 bonus on Disable Device and Sleight of Hand checks. +4 if 10+ ranks in either." },
+  { id: "iron_will", name: "Iron Will", source: "Core Rulebook", types: ["general"], benefit: "+2 bonus on all Will saving throws." },
+  { id: "great_fortitude", name: "Great Fortitude", source: "Core Rulebook", types: ["general"], benefit: "+2 bonus on all Fortitude saving throws." },
+  { id: "lightning_reflexes", name: "Lightning Reflexes", source: "Core Rulebook", types: ["general"], benefit: "+2 bonus on all Reflex saving throws." },
+  { id: "skill_focus", name: "Skill Focus", source: "Core Rulebook", types: ["general"], benefit: "Choose a skill. You get a +3 bonus on all checks involving that skill. If you have 10 or more ranks, the bonus increases to +6." },
+  { id: "toughness", name: "Toughness", source: "Core Rulebook", types: ["general"], benefit: "You gain +3 hit points. For every Hit Die you possess beyond 3, you gain an additional +1 hit point." },
+  { id: "self_sufficient", name: "Self-Sufficient", source: "Core Rulebook", types: ["general"], benefit: "+2 bonus on Heal and Survival checks. +4 if 10+ ranks in either." },
+  { id: "stealthy", name: "Stealthy", source: "Core Rulebook", types: ["general"], benefit: "+2 bonus on Escape Artist and Stealth checks. +4 if 10+ ranks in either." },
+  { id: "endurance", name: "Endurance", source: "Core Rulebook", types: ["general"], benefit: "+4 bonus on checks/saves to resist fatigue, suffocation, exhaustion. Sleep in light/medium armor without fatigue." },
+  { id: "diehard", name: "Diehard", source: "Core Rulebook", types: ["general"], prerequisites: "Endurance", benefit: "When reduced below 0 HP, you can continue to act as if disabled until your hit points drop to a negative amount equal to your Constitution score." },
+  { id: "leadership", name: "Leadership", source: "Core Rulebook", types: ["general"], prerequisites: "Character level 7th", benefit: "Attract a cohort and followers based on your Leadership score." },
+
+  // --- Combat ---
+  { id: "power_attack", name: "Power Attack", source: "Core Rulebook", types: ["combat"], prerequisites: "Str 13, base attack bonus +1", benefit: "Take a –1 penalty on melee attack rolls and combat maneuver checks to gain a +2 bonus on melee damage (1.5× for two-handed). Increases by 1/2 at +4 BAB and every 4 thereafter." },
+  { id: "cleave", name: "Cleave", source: "Core Rulebook", types: ["combat"], prerequisites: "Str 13, Power Attack, base attack bonus +1", benefit: "Standard action: attack one foe, on hit make additional attack on adjacent foe at same bonus; –2 AC until next turn." },
+  { id: "weapon_focus", name: "Weapon Focus", source: "Core Rulebook", types: ["combat"], prerequisites: "Proficiency with selected weapon, base attack bonus +1", benefit: "+1 bonus on attack rolls with selected weapon." },
+  { id: "weapon_specialization", name: "Weapon Specialization", source: "Core Rulebook", types: ["combat"], prerequisites: "Weapon Focus, fighter level 4", benefit: "+2 damage with selected weapon." },
+  { id: "greater_weapon_focus", name: "Greater Weapon Focus", source: "Core Rulebook", types: ["combat"], prerequisites: "Weapon Focus, fighter level 8", benefit: "Additional +1 attack with selected weapon (stacks with Weapon Focus)." },
+  { id: "improved_initiative", name: "Improved Initiative", source: "Core Rulebook", types: ["combat"], benefit: "+4 bonus on initiative checks." },
+  { id: "point_blank_shot", name: "Point-Blank Shot", source: "Core Rulebook", types: ["combat"], benefit: "+1 attack and damage with ranged weapons at ranges of up to 30 feet." },
+  { id: "precise_shot", name: "Precise Shot", source: "Core Rulebook", types: ["combat"], prerequisites: "Point-Blank Shot", benefit: "No –4 penalty when shooting or throwing at a target in melee." },
+  { id: "rapid_shot", name: "Rapid Shot", source: "Core Rulebook", types: ["combat"], prerequisites: "Dex 13, Point-Blank Shot", benefit: "Make one extra ranged attack at highest BAB during a full attack; all attacks suffer –2." },
+  { id: "manyshot", name: "Manyshot", source: "Core Rulebook", types: ["combat"], prerequisites: "Dex 17, Point-Blank Shot, Rapid Shot, base attack bonus +6", benefit: "First arrow at highest BAB during full attack fires two arrows." },
+  { id: "deadly_aim", name: "Deadly Aim", source: "Core Rulebook", types: ["combat"], prerequisites: "Dex 13, base attack bonus +1", benefit: "Take –1 ranged attack to gain +2 ranged damage; scales like Power Attack." },
+  { id: "dodge", name: "Dodge", source: "Core Rulebook", types: ["combat"], prerequisites: "Dex 13", benefit: "+1 dodge bonus to AC." },
+  { id: "mobility", name: "Mobility", source: "Core Rulebook", types: ["combat"], prerequisites: "Dex 13, Dodge", benefit: "+4 dodge bonus to AC against attacks of opportunity provoked by moving out of or within a threatened area." },
+  { id: "combat_expertise", name: "Combat Expertise", source: "Core Rulebook", types: ["combat"], prerequisites: "Int 13", benefit: "Take a –1 penalty on melee attacks and combat maneuver checks for a +1 dodge bonus to AC. Scales with BAB." },
+  { id: "improved_disarm", name: "Improved Disarm", source: "Core Rulebook", types: ["combat"], prerequisites: "Int 13, Combat Expertise", benefit: "No AoO when attempting to disarm; +2 bonus on disarm checks and to CMD against disarm." },
+  { id: "improved_trip", name: "Improved Trip", source: "Core Rulebook", types: ["combat"], prerequisites: "Int 13, Combat Expertise", benefit: "No AoO when attempting to trip; +2 bonus on trip checks and to CMD against trip." },
+  { id: "two_weapon_fighting", name: "Two-Weapon Fighting", source: "Core Rulebook", types: ["combat"], prerequisites: "Dex 15", benefit: "Penalty for fighting with two weapons is reduced by 2 for primary hand, 6 for off-hand." },
+  { id: "improved_two_weapon_fighting", name: "Improved Two-Weapon Fighting", source: "Core Rulebook", types: ["combat"], prerequisites: "Dex 17, Two-Weapon Fighting, base attack bonus +6", benefit: "Gain a second attack with off-hand weapon at –5." },
+  { id: "weapon_finesse", name: "Weapon Finesse", source: "Core Rulebook", types: ["combat"], benefit: "Use Dex modifier instead of Str on attack rolls with light weapons, rapier, whip, or spiked chain." },
+  { id: "vital_strike", name: "Vital Strike", source: "Core Rulebook", types: ["combat"], prerequisites: "Base attack bonus +6", benefit: "When using attack action, deal twice the normal damage dice." },
+  { id: "combat_reflexes", name: "Combat Reflexes", source: "Core Rulebook", types: ["combat"], benefit: "Make additional attacks of opportunity equal to Dex modifier; can make AoO while flat-footed." },
+  { id: "improved_critical", name: "Improved Critical", source: "Core Rulebook", types: ["combat"], prerequisites: "Proficiency with weapon, base attack bonus +8", benefit: "The threat range of one chosen weapon is doubled." },
+
+  // --- Metamagic ---
+  { id: "spell_focus", name: "Spell Focus", source: "Core Rulebook", types: ["general"], benefit: "+1 to the DC for all saving throws against spells from chosen school." },
+  { id: "greater_spell_focus", name: "Greater Spell Focus", source: "Core Rulebook", types: ["general"], prerequisites: "Spell Focus (same school)", benefit: "Additional +1 to DC for chosen school (stacks with Spell Focus)." },
+  { id: "spell_penetration", name: "Spell Penetration", source: "Core Rulebook", types: ["general"], benefit: "+2 to caster level checks to overcome spell resistance." },
+  { id: "greater_spell_penetration", name: "Greater Spell Penetration", source: "Core Rulebook", types: ["general"], prerequisites: "Spell Penetration", benefit: "Additional +2 to caster level checks to overcome spell resistance." },
+  { id: "empower_spell", name: "Empower Spell", source: "Core Rulebook", types: ["metamagic"], benefit: "Numeric variables on spells +50%; uses spell slot 2 levels higher." },
+  { id: "extend_spell", name: "Extend Spell", source: "Core Rulebook", types: ["metamagic"], benefit: "Duration of spell doubled; uses spell slot 1 level higher." },
+  { id: "heighten_spell", name: "Heighten Spell", source: "Core Rulebook", types: ["metamagic"], benefit: "Cast spell as a higher-level spell (DC and effects scale)." },
+  { id: "maximize_spell", name: "Maximize Spell", source: "Core Rulebook", types: ["metamagic"], benefit: "All numeric variables on spell maximized; uses spell slot 3 levels higher." },
+  { id: "quicken_spell", name: "Quicken Spell", source: "Core Rulebook", types: ["metamagic"], benefit: "Cast spell as swift action; uses spell slot 4 levels higher." },
+  { id: "still_spell", name: "Still Spell", source: "Core Rulebook", types: ["metamagic"], benefit: "Cast spell without somatic components; uses spell slot 1 level higher." },
+  { id: "silent_spell", name: "Silent Spell", source: "Core Rulebook", types: ["metamagic"], benefit: "Cast spell without verbal components; uses spell slot 1 level higher." },
+
+  // --- Item creation ---
+  { id: "brew_potion", name: "Brew Potion", source: "Core Rulebook", types: ["item_creation"], prerequisites: "Caster level 3rd", benefit: "Brew potions of spells of 3rd level or lower." },
+  { id: "craft_wondrous_item", name: "Craft Wondrous Item", source: "Core Rulebook", types: ["item_creation"], prerequisites: "Caster level 3rd", benefit: "Create wondrous items." },
+  { id: "craft_wand", name: "Craft Wand", source: "Core Rulebook", types: ["item_creation"], prerequisites: "Caster level 5th", benefit: "Create wands of spells of 4th level or lower." },
+  { id: "craft_magic_arms_and_armor", name: "Craft Magic Arms and Armor", source: "Core Rulebook", types: ["item_creation"], prerequisites: "Caster level 5th", benefit: "Create magic weapons, armor, or shields." },
+  { id: "scribe_scroll", name: "Scribe Scroll", source: "Core Rulebook", types: ["item_creation"], prerequisites: "Caster level 1st", benefit: "Create scrolls of spells you can cast." },
+];
+
+export const FEATS_BY_ID: Record<string, Feat> = Object.fromEntries(
+  CORE_FEATS.map((f) => [f.id, f]),
+);

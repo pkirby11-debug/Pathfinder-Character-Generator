@@ -1,0 +1,72 @@
+@import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=IM+Fell+English:ital@0;1&family=Inter:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: #f7efd9;
+  color: #1a1410;
+  font-family: "Inter", system-ui, sans-serif;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: "Cinzel", Georgia, serif;
+  color: #2b211b;
+}
+
+.font-flavor {
+  font-family: "IM Fell English", Georgia, serif;
+}
+
+/* Print styles for character sheet */
+@media print {
+  body {
+    background: white;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-break {
+    page-break-after: always;
+  }
+  .character-sheet {
+    box-shadow: none !important;
+    border: none !important;
+  }
+}
+
+/* Small utility for stat boxes */
+.stat-box {
+  @apply bg-parchment-50 border-2 border-ink-700 rounded-md p-2 text-center;
+}
+
+.field {
+  @apply bg-parchment-50 border border-ink-700 rounded px-2 py-1 w-full;
+}
+
+.btn {
+  @apply inline-flex items-center gap-2 px-4 py-2 rounded font-display font-semibold text-sm transition-colors;
+}
+
+.btn-primary {
+  @apply btn bg-rust-600 text-parchment-50 hover:bg-rust-700;
+}
+
+.btn-secondary {
+  @apply btn bg-parchment-200 text-ink-900 hover:bg-parchment-300 border border-ink-700;
+}
+
+.btn-ghost {
+  @apply btn text-ink-800 hover:bg-parchment-200;
+}
