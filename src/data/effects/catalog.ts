@@ -1,20 +1,9 @@
-import type { AbilityKey } from "../../types/pathfinder";
+import type { AbilityKey, SkillKey } from "../../types/pathfinder";
 
-// An Effect is a structured modifier bundle applied to a character.
-// Used for conditions (Shaken, Sickened, etc.), spell buffs/debuffs (Bull's
-// Strength, Mage Armor, Bane), and custom user effects.
-//
-// All modifiers are integers added to the relevant stat. PF1 bonus-type
-// stacking rules are not enforced yet — like-named buffs naively sum.
-// We can layer that on later without changing the schema.
-export interface Effect {
-  id: string;
-  name: string;
-  source: "condition" | "spell" | "ability_buff" | "custom";
-  category?: string;
-  description?: string;
-
-  // ---- Modifiers ----
+// Modifier bundle. Reused by Effects (conditions/buffs), Race traits,
+// Feats, and Class choices so that everything flows through the same
+// aggregator in the engine.
+export interface EffectMods {
   attack?: number;
   meleeAttack?: number;
   rangedAttack?: number;
@@ -29,6 +18,7 @@ export interface Effect {
   losesDexToAc?: boolean;
   saves?: { fort?: number; ref?: number; will?: number; all?: number; vsFear?: number };
   skills?: number;
+  skillBonuses?: Partial<Record<SkillKey, number>>;
   abilityChecks?: number;
   abilityScores?: Partial<Record<AbilityKey, number>>;
   initiative?: number;
@@ -37,6 +27,21 @@ export interface Effect {
   speed?: number;        // additive feet
   halfSpeed?: boolean;
   extraAttack?: boolean; // Haste-style
+  hp?: number;           // flat HP bonus (e.g. Toughness handled separately, but kept for other uses)
+}
+
+// An Effect is a structured modifier bundle applied to a character.
+// Used for conditions (Shaken, Sickened, etc.), spell buffs/debuffs (Bull's
+// Strength, Mage Armor, Bane), and custom user effects.
+//
+// PF1 bonus-type stacking rules are not enforced yet — like-named buffs
+// naively sum. We can layer that on later without changing the schema.
+export interface Effect extends EffectMods {
+  id: string;
+  name: string;
+  source: "condition" | "spell" | "ability_buff" | "custom";
+  category?: string;
+  description?: string;
 }
 
 // ----------------- Conditions (PF1 Core, OGL) -----------------

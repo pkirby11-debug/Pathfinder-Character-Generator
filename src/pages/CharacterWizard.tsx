@@ -6,6 +6,7 @@ import { CORE_CLASSES, CLASSES_BY_ID } from "../data/classes/core";
 import { CORE_FEATS, FEATS_BY_ID } from "../data/feats/core";
 import { CORE_SPELLS } from "../data/spells/core";
 import { CORE_WEAPONS, CORE_ARMOR, CORE_GEAR, ITEMS_BY_ID } from "../data/equipment/core";
+import { CLASS_CHOICES, type ChoiceSpec } from "../data/class-options/core";
 import { SKILLS } from "../data/skills/skills";
 import { ABILITY_KEYS, ABILITY_NAMES, type Character, type Alignment } from "../types/pathfinder";
 import {
@@ -440,6 +441,8 @@ function ClassStep({ draft, update }: { draft: Character; update: (p: Partial<Ch
                   <button className="btn-ghost text-xs" onClick={() => fillHpRolls(cl.classId, "average")}>Avg all</button>
                   <button className="btn-ghost text-xs" onClick={() => fillHpRolls(cl.classId, "max")}>Max all</button>
                 </div>
+
+                <ClassChoicesEditor classId={cl.classId} classLevel={cl.level} draft={draft} update={update} />
               </div>
             );
           })}
@@ -937,6 +940,126 @@ function ReviewStep({ draft }: { draft: Character }) {
       <p className="text-sm font-flavor text-ink-700 mt-4">
         Save the character to view a printable sheet.
       </p>
+    </div>
+  );
+}
+
+// ------------- Class Choices Editor -------------
+function ClassChoicesEditor({
+  classId, classLevel, draft, update,
+}: {
+  classId: string; classLevel: number;
+  draft: Character; update: (p: Partial<Character>) => void;
+}) {
+  const specs = CLASS_CHOICES[classId];
+  if (!specs) return null;
+
+  const visibleSpecs = specs.filter((spec) => {
+    if (spec.level > classLevel) return false;
+    // Sub-choice for Transmutation wizard: only show if school is transmutation
+    if (spec.key === "transmutation_physical") {
+      return draft.classChoices?.[`${classId}.school`] === "transmutation";
+    }
+    return true;
+  });
+
+  if (visibleSpecs.length === 0) return null;
+
+  return (
+    <div className="mt-3 pt-3 border-t border-parchment-300 space-y-3">
+      {visibleSpecs.map((spec) => (
+        <ClassChoiceRow
+          key={spec.key}
+          classId={classId}
+          spec={spec}
+          draft={draft}
+          update={update}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ClassChoiceRow({
+  classId, spec, draft, update,
+}: {
+  classId: string; spec: ChoiceSpec;
+  draft: Character; update: (p: Partial<Character>) => void;
+}) {
+  const storageKey = `${classId}.${spec.key}`;
+  const current = draft.classChoices?.[storageKey];
+  const multi = spec.multi ?? 1;
+  const currentList: string[] = Array.isArray(current) ? current : current ? [current] : [];
+
+  const setChoice = (optionId: string) => {
+    const nextChoices = { ...(draft.classChoices ?? {}) };
+    if (multi > 1) {
+      const set = new Set(currentList);
+      if (set.has(optionId)) {
+        set.delete(optionId);
+      } else if (set.size < multi) {
+        set.add(optionId);
+      } else {
+        return; // already at max
+      }
+      nextChoices[storageKey] = Array.from(set);
+    } else {
+      // Single-select: clicking the same option clears it; otherwise switch.
+      if (currentList[0] === optionId) {
+        delete nextChoices[storageKey];
+        // Clearing the wizard school should also clear the sub-choice
+        if (spec.key === "school") delete nextChoices[`${classId}.transmutation_physical`];
+      } else {
+        nextChoices[storageKey] = optionId;
+        if (spec.key === "school" && optionId !== "transmutation") {
+          delete nextChoices[`${classId}.transmutation_physical`];
+        }
+      }
+    }
+    update({ classChoices: nextChoices });
+  };
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between">
+        <h4 className="font-display text-sm">
+          {spec.label}
+          {multi > 1 && (
+            <span className="text-xs text-ink-700 ml-2 font-normal">
+              ({currentList.length}/{multi} selected)
+            </span>
+          )}
+        </h4>
+      </div>
+      {spec.description && (
+        <p className="text-xs text-ink-700 mb-1 font-flavor">{spec.description}</p>
+      )}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1">
+        {spec.options.map((opt) => {
+          const selected = currentList.includes(opt.id);
+          return (
+            <button
+              key={opt.id}
+              onClick={() => setChoice(opt.id)}
+              title={opt.description}
+              className={
+                "text-left p-2 rounded border-2 text-xs transition-colors " +
+                (selected
+                  ? "border-rust-600 bg-parchment-50"
+                  : "border-ink-700 bg-parchment-50 hover:border-rust-600")
+              }
+            >
+              <div className="font-display">{opt.name}</div>
+              <p className="text-ink-700 line-clamp-2 mt-0.5">{opt.description}</p>
+              {opt.extras && opt.extras.length > 0 && selected && (
+                <ul className="mt-1 list-disc ml-3 text-ink-700">
+                  {opt.extras.map((e, i) => <li key={i}>{e}</li>)}
+                </ul>
+              )}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

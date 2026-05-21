@@ -11,6 +11,7 @@ import { ABILITY_KEYS, ABILITY_NAMES, type AbilityKey } from "../types/pathfinde
 import { abilityModString, derive } from "../engine";
 import { spellDC, spellDamage, spellReferenceUrl, hasSavingThrow } from "../engine/spells";
 import { CONDITIONS, SPELL_BUFFS, EFFECTS_BY_ID, type Effect } from "../data/effects/catalog";
+import { CLASS_CHOICES } from "../data/class-options/core";
 
 export function CharacterSheet() {
   const { id } = useParams();
@@ -312,6 +313,45 @@ export function CharacterSheet() {
                   ));
               })}
             </ul>
+            {(() => {
+              const choiceLines: { classId: string; label: string; optionName: string; description?: string; extras?: string[] }[] = [];
+              for (const [storageKey, value] of Object.entries(character.classChoices ?? {})) {
+                const [classId, choiceKey] = storageKey.split(".");
+                const specs = CLASS_CHOICES[classId];
+                const spec = specs?.find((s) => s.key === choiceKey);
+                if (!spec) continue;
+                const ids = Array.isArray(value) ? value : [value];
+                for (const oid of ids) {
+                  const opt = spec.options.find((o) => o.id === oid);
+                  if (opt) choiceLines.push({
+                    classId, label: spec.label, optionName: opt.name,
+                    description: opt.description, extras: opt.extras,
+                  });
+                }
+              }
+              if (choiceLines.length === 0) return null;
+              return (
+                <div className="mt-3">
+                  <h4 className="font-display text-sm border-b border-parchment-300">Class Choices</h4>
+                  <ul className="text-sm space-y-1 mt-1">
+                    {choiceLines.map((c, i) => (
+                      <li key={i}>
+                        <span className="text-xs text-ink-700">{CLASSES_BY_ID[c.classId]?.name} · {c.label}:</span>{" "}
+                        <strong>{c.optionName}</strong>
+                        {c.description && (
+                          <span className="text-ink-700"> — {c.description}</span>
+                        )}
+                        {c.extras && c.extras.length > 0 && (
+                          <ul className="list-disc ml-5 text-xs text-ink-700">
+                            {c.extras.map((e, j) => <li key={j}>{e}</li>)}
+                          </ul>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })()}
           </div>
         </section>
 

@@ -51,6 +51,9 @@ export interface Race {
 export interface RaceTrait {
   name: string;
   description: string;
+  // Mechanical modifiers (skills, saves, ability scores, etc.) applied automatically.
+  // Conditional/situational bonuses (e.g., dwarf "+1 attack vs. orcs") stay in description only.
+  mods?: import("../data/effects/catalog").EffectMods;
 }
 
 export interface CharacterClass {
@@ -117,6 +120,10 @@ export interface Feat {
   benefit: string;
   normal?: string;
   special?: string;
+  // Mechanical modifiers applied while this feat is chosen.
+  // Only set for feats with a fixed, always-on effect (Iron Will, Skill-pair feats, Dodge, Toughness).
+  // Feats that need a target (Skill Focus, Weapon Focus) are descriptive-only until target-picker UI lands.
+  mods?: import("../data/effects/catalog").EffectMods;
 }
 
 export type SpellSchool =
@@ -253,6 +260,9 @@ export interface Character {
   // Active effects: IDs from the effects catalog plus any custom effects on this character.
   activeEffectIds?: string[];
   customEffects?: import("../data/effects/catalog").Effect[];
+  // Class-specific choices keyed by "<classId>.<choiceKey>", value is option id (single)
+  // or array of option ids (multi-pick like cleric domains).
+  classChoices?: Record<string, string | string[]>;
   // Ability damage (temporary) and drain (permanent) per stat.
   abilityDamage?: Partial<AbilityScores>;
   abilityDrain?: Partial<AbilityScores>;

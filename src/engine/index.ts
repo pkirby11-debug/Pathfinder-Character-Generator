@@ -10,7 +10,8 @@ import { CLASSES_BY_ID } from "../data/classes/core";
 import { FEATS_BY_ID } from "../data/feats/core";
 import { ITEMS_BY_ID } from "../data/equipment/core";
 import { SKILLS } from "../data/skills/skills";
-import { EFFECTS_BY_ID, type Effect } from "../data/effects/catalog";
+import { EFFECTS_BY_ID, type Effect, type EffectMods } from "../data/effects/catalog";
+import { findClassOption } from "../data/class-options/core";
 
 // Resolves active effects on a character (from both catalog IDs and inline
 // custom effects) into a single list of Effect definitions.
@@ -27,7 +28,7 @@ export function resolveActiveEffects(character: Character): Effect[] {
   return out;
 }
 
-// Aggregates modifiers from active effects into one totals object.
+// Aggregates modifiers into one totals object.
 interface EffectTotals {
   attack: number;
   meleeAttack: number;
@@ -43,6 +44,7 @@ interface EffectTotals {
   losesDexToAc: boolean;
   saves: { fort: number; ref: number; will: number; vsFear: number };
   skills: number;
+  skillBonuses: Record<string, number>;
   abilityChecks: number;
   abilityScores: AbilityScores;
   initiative: number;
@@ -51,6 +53,7 @@ interface EffectTotals {
   speed: number;
   halfSpeed: boolean;
   extraAttack: boolean;
+  hp: number;
 }
 
 function emptyTotals(): EffectTotals {
@@ -60,50 +63,91 @@ function emptyTotals(): EffectTotals {
     acBonus: 0, armorBonus: 0, shieldBonus: 0, naturalArmor: 0, deflection: 0, dodge: 0,
     losesDexToAc: false,
     saves: { fort: 0, ref: 0, will: 0, vsFear: 0 },
-    skills: 0, abilityChecks: 0,
+    skills: 0, skillBonuses: {}, abilityChecks: 0,
     abilityScores: { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
     initiative: 0, cmb: 0, cmd: 0, speed: 0,
-    halfSpeed: false, extraAttack: false,
+    halfSpeed: false, extraAttack: false, hp: 0,
   };
+}
+
+function applyMods(t: EffectTotals, e: EffectMods): void {
+  t.attack += e.attack ?? 0;
+  t.meleeAttack += e.meleeAttack ?? 0;
+  t.rangedAttack += e.rangedAttack ?? 0;
+  t.damage += e.damage ?? 0;
+  t.meleeDamage += e.meleeDamage ?? 0;
+  t.acBonus += e.acBonus ?? 0;
+  t.armorBonus += e.armorBonus ?? 0;
+  t.shieldBonus += e.shieldBonus ?? 0;
+  t.naturalArmor += e.naturalArmor ?? 0;
+  t.deflection += e.deflection ?? 0;
+  t.dodge += e.dodge ?? 0;
+  if (e.losesDexToAc) t.losesDexToAc = true;
+  if (e.saves) {
+    t.saves.fort += (e.saves.fort ?? 0) + (e.saves.all ?? 0);
+    t.saves.ref += (e.saves.ref ?? 0) + (e.saves.all ?? 0);
+    t.saves.will += (e.saves.will ?? 0) + (e.saves.all ?? 0);
+    t.saves.vsFear += e.saves.vsFear ?? 0;
+  }
+  t.skills += e.skills ?? 0;
+  if (e.skillBonuses) {
+    for (const [k, v] of Object.entries(e.skillBonuses)) {
+      if (typeof v === "number" && v !== 0) {
+        t.skillBonuses[k] = (t.skillBonuses[k] ?? 0) + v;
+      }
+    }
+  }
+  t.abilityChecks += e.abilityChecks ?? 0;
+  if (e.abilityScores) {
+    for (const k of ABILITY_KEYS) {
+      const m = e.abilityScores[k];
+      if (typeof m === "number") t.abilityScores[k] += m;
+    }
+  }
+  t.initiative += e.initiative ?? 0;
+  t.cmb += e.cmb ?? 0;
+  t.cmd += e.cmd ?? 0;
+  t.speed += e.speed ?? 0;
+  if (e.halfSpeed) t.halfSpeed = true;
+  if (e.extraAttack) t.extraAttack = true;
+  t.hp += e.hp ?? 0;
 }
 
 function aggregateEffectTotals(effects: Effect[]): EffectTotals {
   const t = emptyTotals();
-  for (const e of effects) {
-    t.attack += e.attack ?? 0;
-    t.meleeAttack += e.meleeAttack ?? 0;
-    t.rangedAttack += e.rangedAttack ?? 0;
-    t.damage += e.damage ?? 0;
-    t.meleeDamage += e.meleeDamage ?? 0;
-    t.acBonus += e.acBonus ?? 0;
-    t.armorBonus += e.armorBonus ?? 0;
-    t.shieldBonus += e.shieldBonus ?? 0;
-    t.naturalArmor += e.naturalArmor ?? 0;
-    t.deflection += e.deflection ?? 0;
-    t.dodge += e.dodge ?? 0;
-    if (e.losesDexToAc) t.losesDexToAc = true;
-    if (e.saves) {
-      t.saves.fort += (e.saves.fort ?? 0) + (e.saves.all ?? 0);
-      t.saves.ref += (e.saves.ref ?? 0) + (e.saves.all ?? 0);
-      t.saves.will += (e.saves.will ?? 0) + (e.saves.all ?? 0);
-      t.saves.vsFear += e.saves.vsFear ?? 0;
-    }
-    t.skills += e.skills ?? 0;
-    t.abilityChecks += e.abilityChecks ?? 0;
-    if (e.abilityScores) {
-      for (const k of ABILITY_KEYS) {
-        const m = e.abilityScores[k];
-        if (typeof m === "number") t.abilityScores[k] += m;
+  for (const e of effects) applyMods(t, e);
+  return t;
+}
+
+// Pulls EffectMods bundles from race traits, chosen feats, and class choices.
+function collectBackgroundMods(character: Character): EffectMods[] {
+  const out: EffectMods[] = [];
+  // Race traits
+  const race = RACES_BY_ID[character.raceId];
+  if (race) {
+    for (const t of race.traits) if (t.mods) out.push(t.mods);
+  }
+  // Feats
+  const featIds = [
+    ...(character.startingFeats ?? []),
+    ...character.classLevels.flatMap((cl) => cl.chosenFeats ?? []),
+  ];
+  for (const fid of featIds) {
+    const feat = FEATS_BY_ID[fid];
+    if (feat?.mods) out.push(feat.mods);
+  }
+  // Class choices
+  if (character.classChoices) {
+    for (const [key, value] of Object.entries(character.classChoices)) {
+      const [classId, choiceKey] = key.split(".");
+      const ids = Array.isArray(value) ? value : [value];
+      for (const optionId of ids) {
+        const opt = findClassOption(classId, choiceKey, optionId);
+        if (opt?.mods) out.push(opt.mods);
       }
     }
-    t.initiative += e.initiative ?? 0;
-    t.cmb += e.cmb ?? 0;
-    t.cmd += e.cmd ?? 0;
-    t.speed += e.speed ?? 0;
-    if (e.halfSpeed) t.halfSpeed = true;
-    if (e.extraAttack) t.extraAttack = true;
   }
-  return t;
+  return out;
 }
 
 export const SIZE_MODIFIER: Record<Size, number> = {
@@ -204,8 +248,14 @@ export function derive(character: Character): DerivedStats {
   }
 
   // --- Active effects, ability damage/drain, negative levels ---
+  // The totals object aggregates modifiers from four sources:
+  //   1. Race traits (always-on)
+  //   2. Chosen feats (always-on if the feat has fixed mods)
+  //   3. Class choices (always-on for the picked option, e.g., Transmutation +1 stat)
+  //   4. Active effects (conditions, buffs, custom)
   const activeEffects = resolveActiveEffects(character);
   const effectTotals = aggregateEffectTotals(activeEffects);
+  for (const m of collectBackgroundMods(character)) applyMods(effectTotals, m);
   const negativeLevels = character.negativeLevels ?? 0;
 
   // Ability scores: base + effects + drain/damage
@@ -263,11 +313,12 @@ export function derive(character: Character): DerivedStats {
   // Add Con modifier per level
   maxHp += abilityMods.con * totalLevel;
 
-  // Toughness feat
+  // Toughness feat (HP scales with HD, so handled here rather than via mods)
   const allFeats = collectAllFeats(character);
   if (allFeats.includes("toughness")) {
     maxHp += Math.max(3, totalLevel);
   }
+  maxHp += effectTotals.hp;
 
   // Favored class HP bonus
   for (const cl of character.classLevels) {
@@ -310,35 +361,33 @@ export function derive(character: Character): DerivedStats {
   const acFlatFooted = 10 + armorBonus + shieldBonus + sizeMod + naturalArmor + deflection + effectTotals.acBonus;
 
   // --- Saves total ---
-  const ironWillMisc = allFeats.includes("iron_will") ? 2 : 0;
-  const greatFortMisc = allFeats.includes("great_fortitude") ? 2 : 0;
-  const lightRefMisc = allFeats.includes("lightning_reflexes") ? 2 : 0;
-
+  // Save-bonus feats (Iron Will, Great Fortitude, Lightning Reflexes) and
+  // race traits like Halfling Luck are folded in via effectTotals.saves.
   const saves = {
     fort: {
       base: saveBaseTotals.fort,
       ability: abilityMods.con,
-      misc: greatFortMisc + effectTotals.saves.fort - negativeLevels,
-      total: saveBaseTotals.fort + abilityMods.con + greatFortMisc + effectTotals.saves.fort - negativeLevels,
+      misc: effectTotals.saves.fort - negativeLevels,
+      total: saveBaseTotals.fort + abilityMods.con + effectTotals.saves.fort - negativeLevels,
     },
     ref: {
       base: saveBaseTotals.ref,
       ability: abilityMods.dex,
-      misc: lightRefMisc + effectTotals.saves.ref - negativeLevels,
-      total: saveBaseTotals.ref + abilityMods.dex + lightRefMisc + effectTotals.saves.ref - negativeLevels,
+      misc: effectTotals.saves.ref - negativeLevels,
+      total: saveBaseTotals.ref + abilityMods.dex + effectTotals.saves.ref - negativeLevels,
     },
     will: {
       base: saveBaseTotals.will,
       ability: abilityMods.wis,
-      misc: ironWillMisc + effectTotals.saves.will - negativeLevels,
-      total: saveBaseTotals.will + abilityMods.wis + ironWillMisc + effectTotals.saves.will - negativeLevels,
+      misc: effectTotals.saves.will - negativeLevels,
+      total: saveBaseTotals.will + abilityMods.wis + effectTotals.saves.will - negativeLevels,
     },
   };
 
   // --- Attacks ---
-  // CMB = BAB + Str mod + size special modifier (different from AC)
+  // CMB = BAB + Str mod + size special modifier (different from AC).
+  // Improved Initiative is now folded via effectTotals.initiative through its feat mods.
   const cmbSizeMod = sizeSpecialMod(size);
-  const initImproved = allFeats.includes("improved_initiative") ? 4 : 0;
 
   // --- Skills ---
   const skills: DerivedStats["skills"] = {};
@@ -351,11 +400,12 @@ export function derive(character: Character): DerivedStats {
     const classSkillBonus = ranks > 0 && isClassSkill ? 3 : 0;
     const abilityBonus = abilityMods[skill.ability];
     const skillEffectBonus = effectTotals.skills - negativeLevels;
+    const skillSpecific = effectTotals.skillBonuses[skill.id] ?? 0;
     skills[skill.id] = {
       ranks,
       classSkillBonus,
       ability: abilityBonus,
-      total: ranks + classSkillBonus + abilityBonus + skillEffectBonus,
+      total: ranks + classSkillBonus + abilityBonus + skillEffectBonus + skillSpecific,
       trained: ranks > 0,
     };
   }
@@ -410,7 +460,7 @@ export function derive(character: Character): DerivedStats {
       misc,
     },
     hp: { max: maxHp, current: character.currentHp ?? maxHp },
-    initiative: abilityMods.dex + initImproved + effectTotals.initiative,
+    initiative: abilityMods.dex + effectTotals.initiative,
     speed: finalSpeed,
     size,
     sizeMod,
