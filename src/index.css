@@ -52,7 +52,7 @@ h4 {
 }
 
 .field {
-  @apply bg-parchment-50 border border-ink-700 rounded px-2 py-1 w-full;
+  @apply bg-parchment-50 border border-ink-700 rounded px-2 py-1;
 }
 
 .btn {

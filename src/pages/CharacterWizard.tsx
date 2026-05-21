@@ -136,21 +136,21 @@ function BasicsStep({ draft, update }: { draft: Character; update: (p: Partial<C
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Field label="Name">
           <input
-            className="field"
+            className="field w-full"
             value={draft.name}
             onChange={(e) => update({ name: e.target.value })}
           />
         </Field>
         <Field label="Player">
           <input
-            className="field"
+            className="field w-full"
             value={draft.player ?? ""}
             onChange={(e) => update({ player: e.target.value })}
           />
         </Field>
         <Field label="Alignment">
           <select
-            className="field"
+            className="field w-full"
             value={draft.alignment}
             onChange={(e) => update({ alignment: e.target.value as Alignment })}
           >
@@ -161,21 +161,21 @@ function BasicsStep({ draft, update }: { draft: Character; update: (p: Partial<C
         </Field>
         <Field label="Deity">
           <input
-            className="field"
+            className="field w-full"
             value={draft.deity ?? ""}
             onChange={(e) => update({ deity: e.target.value })}
           />
         </Field>
         <Field label="Gender">
           <input
-            className="field"
+            className="field w-full"
             value={draft.gender ?? ""}
             onChange={(e) => update({ gender: e.target.value as Character["gender"] })}
           />
         </Field>
         <Field label="Age">
           <input
-            className="field"
+            className="field w-full"
             type="number"
             value={draft.age ?? ""}
             onChange={(e) => update({ age: e.target.value ? Number(e.target.value) : undefined })}
@@ -717,7 +717,7 @@ function EquipmentStep({ draft, update }: { draft: Character; update: (p: Partia
                 <Field key={k} label={k.toUpperCase()}>
                   <input
                     type="number"
-                    className="field"
+                    className="field w-full"
                     value={draft.money[k]}
                     onChange={(e) =>
                       update({ money: { ...draft.money, [k]: Number(e.target.value) || 0 } })
@@ -735,7 +735,7 @@ function EquipmentStep({ draft, update }: { draft: Character; update: (p: Partia
             placeholder="Search items…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            className="field mb-2"
+            className="field w-full mb-2"
           />
           <div className="max-h-[400px] overflow-y-auto space-y-1 pr-1">
             {items.map((i) => (
