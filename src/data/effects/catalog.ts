@@ -42,6 +42,11 @@ export interface Effect extends EffectMods {
   source: "condition" | "spell" | "ability_buff" | "custom";
   category?: string;
   description?: string;
+  // If set, the situational/buffs UI only offers this effect to characters of
+  // the listed races. Used for conditional racial bonuses (dwarf vs. orcs,
+  // halfling vs. fear, etc.) that don't auto-apply but the player can flip
+  // on when the circumstances apply.
+  restrictedToRace?: string[];
 }
 
 // ----------------- Conditions (PF1 Core, OGL) -----------------
@@ -220,7 +225,66 @@ export const SPELL_BUFFS: Effect[] = [
     description: "+Cha to attack, +paladin level to damage vs. evil target." },
 ];
 
-export const ALL_EFFECTS: Effect[] = [...CONDITIONS, ...SPELL_BUFFS];
+// ----------------- Situational racial bonuses (PF1 Core, OGL) -----------------
+// Conditional bonuses that only apply in specific circumstances. The player
+// toggles them on when the situation arises (fighting a dwarf's hated foe,
+// resisting fear as a halfling, etc.) and back off when it ends. Filtered
+// in the UI by `restrictedToRace`.
+export const SITUATIONAL_EFFECTS: Effect[] = [
+  // Dwarf
+  { id: "sit_dwarf_hatred", name: "Hatred (vs. orcs / goblinoids)", source: "ability_buff", category: "Dwarf",
+    description: "+1 racial attack vs. humanoids of the orc or goblinoid subtypes.",
+    attack: 1, restrictedToRace: ["dwarf"] },
+  { id: "sit_dwarf_defensive_training", name: "Defensive Training (vs. giants)", source: "ability_buff", category: "Dwarf",
+    description: "+4 dodge AC against monsters of the giant subtype.",
+    dodge: 4, restrictedToRace: ["dwarf"] },
+  { id: "sit_dwarf_hardy", name: "Hardy (vs. poison / spells / SLAs)", source: "ability_buff", category: "Dwarf",
+    description: "+2 racial saves against poison, spells, and spell-like abilities.",
+    saves: { all: 2 }, restrictedToRace: ["dwarf"] },
+  { id: "sit_dwarf_stability", name: "Stability (vs. bull rush / trip)", source: "ability_buff", category: "Dwarf",
+    description: "+4 racial CMD against bull rush and trip while on the ground.",
+    cmd: 4, restrictedToRace: ["dwarf"] },
+  { id: "sit_dwarf_stonecunning", name: "Stonecunning (noticing stonework)", source: "ability_buff", category: "Dwarf",
+    description: "+2 Perception when noticing unusual stonework.",
+    skillBonuses: { perception: 2 }, restrictedToRace: ["dwarf"] },
+
+  // Elf / Half-Elf
+  { id: "sit_elf_immunities", name: "Elven Immunities (vs. enchantment)", source: "ability_buff", category: "Elf",
+    description: "+2 racial saves vs. enchantment spells and effects (immune to magic sleep).",
+    saves: { will: 2 }, restrictedToRace: ["elf", "half_elf"] },
+  { id: "sit_elf_magic_sr", name: "Elven Magic (vs. SR)", source: "ability_buff", category: "Elf",
+    description: "+2 racial bonus on caster level checks to overcome spell resistance.",
+    restrictedToRace: ["elf"] },
+
+  // Halfling
+  { id: "sit_halfling_fearless", name: "Fearless (vs. fear)", source: "ability_buff", category: "Halfling",
+    description: "+2 racial saves vs. fear (stacks with Halfling Luck for +3 total).",
+    saves: { vsFear: 2 }, restrictedToRace: ["halfling"] },
+  { id: "sit_halfling_thrown", name: "Slings & thrown (size bonus)", source: "ability_buff", category: "Halfling",
+    description: "+1 racial attack with slings and thrown weapons (already in size mod).",
+    restrictedToRace: ["halfling"] },
+
+  // Gnome
+  { id: "sit_gnome_defensive_training", name: "Defensive Training (vs. giants)", source: "ability_buff", category: "Gnome",
+    description: "+4 dodge AC against monsters of the giant subtype.",
+    dodge: 4, restrictedToRace: ["gnome"] },
+  { id: "sit_gnome_hatred", name: "Hatred (vs. reptilian / goblinoids)", source: "ability_buff", category: "Gnome",
+    description: "+1 racial attack vs. humanoids of the reptilian or goblinoid subtypes.",
+    attack: 1, restrictedToRace: ["gnome"] },
+  { id: "sit_gnome_illusion_resistance", name: "Illusion Resistance (vs. illusions)", source: "ability_buff", category: "Gnome",
+    description: "+2 racial saves vs. illusion spells or effects.",
+    saves: { will: 2 }, restrictedToRace: ["gnome"] },
+  { id: "sit_gnome_obsessive", name: "Obsessive (one Craft/Profession)", source: "ability_buff", category: "Gnome",
+    description: "+2 racial bonus on one chosen Craft or Profession.",
+    restrictedToRace: ["gnome"] },
+
+  // Half-Orc
+  { id: "sit_halforc_ferocity", name: "Orc Ferocity (1/day, below 0 HP)", source: "ability_buff", category: "Half-Orc",
+    description: "When brought below 0 HP but not killed, fight on for 1 more round as if disabled.",
+    restrictedToRace: ["half_orc"] },
+];
+
+export const ALL_EFFECTS: Effect[] = [...CONDITIONS, ...SPELL_BUFFS, ...SITUATIONAL_EFFECTS];
 export const EFFECTS_BY_ID: Record<string, Effect> = Object.fromEntries(
   ALL_EFFECTS.map((e) => [e.id, e]),
 );

@@ -10,8 +10,10 @@ import { SKILLS } from "../data/skills/skills";
 import { ABILITY_KEYS, ABILITY_NAMES, type AbilityKey } from "../types/pathfinder";
 import { abilityModString, derive } from "../engine";
 import { spellDC, spellDamage, spellReferenceUrl, hasSavingThrow } from "../engine/spells";
-import { CONDITIONS, SPELL_BUFFS, EFFECTS_BY_ID, type Effect } from "../data/effects/catalog";
+import { CONDITIONS, SPELL_BUFFS, SITUATIONAL_EFFECTS, EFFECTS_BY_ID, type Effect } from "../data/effects/catalog";
 import { CLASS_CHOICES } from "../data/class-options/core";
+import { parseFeatId } from "../engine";
+import { SKILLS_BY_ID } from "../data/skills/skills";
 
 export function CharacterSheet() {
   const { id } = useParams();
@@ -152,6 +154,7 @@ export function CharacterSheet() {
         <EffectsPanel
           activeIds={character.activeEffectIds ?? []}
           customEffects={character.customEffects ?? []}
+          raceId={character.raceId}
           customLabel={customCondition}
           setCustomLabel={setCustomCondition}
           toggleEffect={(eid) => {
@@ -275,12 +278,20 @@ export function CharacterSheet() {
           <h3 className="font-display border-b border-ink-700 mb-2">Feats</h3>
           <ul className="text-sm grid grid-cols-1 md:grid-cols-2 gap-x-6">
             {(character.startingFeats ?? []).map((id) => {
-              const f = FEATS_BY_ID[id];
-              return f ? (
+              const { baseId, target } = parseFeatId(id);
+              const f = FEATS_BY_ID[baseId];
+              if (!f) return null;
+              const targetName = target
+                ? (SKILLS_BY_ID[target]?.name ??
+                    ITEMS_BY_ID[target]?.name ??
+                    target.charAt(0).toUpperCase() + target.slice(1))
+                : null;
+              return (
                 <li key={id}>
-                  <strong>{f.name}.</strong> <span className="text-ink-700">{f.benefit}</span>
+                  <strong>{f.name}{targetName && ` (${targetName})`}.</strong>{" "}
+                  <span className="text-ink-700">{f.benefit}</span>
                 </li>
-              ) : null;
+              );
             })}
           </ul>
         </section>
@@ -405,7 +416,7 @@ export function CharacterSheet() {
                         .map((k) => {
                           const s = SPELLS_BY_ID[k.spellId];
                           if (!s) return null;
-                          const dc = spellDC(s, d, classId);
+                          const dc = spellDC(s, d, classId, character);
                           const dmg = spellDamage(s.id, casterLevel);
                           const save = hasSavingThrow(s);
                           return (
@@ -611,6 +622,7 @@ interface EffectsPanelProps {
   toggleEffect: (eid: string) => void;
   addCustom: () => void;
   removeCustom: (eid: string) => void;
+  raceId: string;
 }
 
 function summarizeEffect(e: Effect): string {
@@ -654,7 +666,7 @@ function signed(n: number): string {
 
 function EffectsPanel({
   activeIds, customEffects, customLabel, setCustomLabel,
-  toggleEffect, addCustom, removeCustom,
+  toggleEffect, addCustom, removeCustom, raceId,
 }: EffectsPanelProps) {
   const activeSet = new Set(activeIds);
   const activeList = activeIds
@@ -751,6 +763,42 @@ function EffectsPanel({
           ))}
         </div>
       </div>
+
+      {/* Situational racial bonuses (only those for this character's race) */}
+      {(() => {
+        const racial = SITUATIONAL_EFFECTS.filter(
+          (e) => !e.restrictedToRace || e.restrictedToRace.includes(raceId),
+        );
+        if (racial.length === 0) return null;
+        return (
+          <div className="no-print">
+            <h3 className="font-display border-b border-ink-700 mb-2">Situational Bonuses</h3>
+            <p className="text-xs text-ink-700 mb-1 font-flavor">
+              Toggle on only while the situation applies (e.g., fighting orcs, saving vs. fear).
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {racial.map((b) => {
+                const on = activeSet.has(b.id);
+                return (
+                  <button
+                    key={b.id}
+                    onClick={() => toggleEffect(b.id)}
+                    title={b.description}
+                    className={
+                      "text-xs px-2 py-1 rounded border transition-colors " +
+                      (on
+                        ? "bg-rust-600 text-parchment-50 border-rust-700"
+                        : "bg-parchment-50 text-ink-800 border-ink-700 hover:bg-parchment-200")
+                    }
+                  >
+                    {b.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="no-print">
         <h3 className="font-display border-b border-ink-700 mb-2">Custom Effect</h3>

@@ -121,9 +121,12 @@ export interface Feat {
   normal?: string;
   special?: string;
   // Mechanical modifiers applied while this feat is chosen.
-  // Only set for feats with a fixed, always-on effect (Iron Will, Skill-pair feats, Dodge, Toughness).
-  // Feats that need a target (Skill Focus, Weapon Focus) are descriptive-only until target-picker UI lands.
+  // For fixed-effect feats (Iron Will, skill-pair feats, Dodge), these auto-apply.
+  // For target-requiring feats, `target` declares what to pick, and the engine
+  // computes the resulting bonus from the chosen target (stored as a qualified
+  // feat id like "skill_focus:perception").
   mods?: import("../data/effects/catalog").EffectMods;
+  target?: { type: "skill" | "weapon" | "spell_school"; label?: string };
 }
 
 export type SpellSchool =

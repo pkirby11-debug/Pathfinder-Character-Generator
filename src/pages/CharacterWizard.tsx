@@ -581,6 +581,16 @@ function FeatsStep({ draft, update }: { draft: Character; update: (p: Partial<Ch
     }
   };
 
+  const addTargetedFeat = (featId: string) => {
+    if (chosen.includes(featId)) return;
+    if (chosen.length >= totalSlots) return;
+    update({ startingFeats: [...chosen, featId] });
+  };
+
+  const removeFeat = (featId: string) => {
+    update({ startingFeats: chosen.filter((f) => f !== featId) });
+  };
+
   return (
     <div className="space-y-4">
       <h2 className="text-2xl">Feats</h2>
@@ -600,6 +610,17 @@ function FeatsStep({ draft, update }: { draft: Character; update: (p: Partial<Ch
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         {CORE_FEATS.map((f) => {
+          if (f.target) {
+            return (
+              <TargetedFeatCard
+                key={f.id}
+                feat={f}
+                chosen={chosen}
+                addTargetedFeat={addTargetedFeat}
+                removeFeat={removeFeat}
+              />
+            );
+          }
           const picked = chosen.includes(f.id);
           return (
             <button
@@ -626,6 +647,102 @@ function FeatsStep({ draft, update }: { draft: Character; update: (p: Partial<Ch
       </div>
     </div>
   );
+}
+
+// Card for a feat that requires a target (Skill Focus, Weapon Focus, Spell Focus).
+function TargetedFeatCard({
+  feat, chosen, addTargetedFeat, removeFeat,
+}: {
+  feat: import("../types/pathfinder").Feat;
+  chosen: string[];
+  addTargetedFeat: (qualifiedId: string) => void;
+  removeFeat: (qualifiedId: string) => void;
+}) {
+  const [pending, setPending] = useState("");
+  const instances = chosen.filter((c) => c.startsWith(feat.id + ":"));
+  const targetOptions = targetOptionsFor(feat);
+  const usedTargets = new Set(instances.map((i) => i.slice(feat.id.length + 1)));
+  const remainingOptions = targetOptions.filter((o) => !usedTargets.has(o.id));
+
+  const add = () => {
+    if (!pending) return;
+    addTargetedFeat(`${feat.id}:${pending}`);
+    setPending("");
+  };
+
+  return (
+    <div className={
+      "text-left p-3 rounded-md border-2 " +
+      (instances.length > 0 ? "border-rust-600 bg-parchment-100" : "border-ink-700 bg-parchment-50")
+    }>
+      <div className="flex justify-between">
+        <span className="font-display">
+          {feat.name}
+          {instances.length > 0 && <span className="text-xs text-ink-700"> · ×{instances.length}</span>}
+        </span>
+        <span className="text-xs text-ink-700">{feat.types.join(", ")}</span>
+      </div>
+      {feat.prerequisites && (
+        <p className="text-xs text-rust-600 italic">Prereq: {feat.prerequisites}</p>
+      )}
+      <p className="text-xs mt-1">{feat.benefit}</p>
+      {instances.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {instances.map((inst) => {
+            const target = inst.slice(feat.id.length + 1);
+            const targetName = targetOptions.find((o) => o.id === target)?.name ?? target;
+            return (
+              <button
+                key={inst}
+                onClick={() => removeFeat(inst)}
+                className="text-xs px-2 py-0.5 rounded bg-rust-600 text-parchment-50 hover:bg-rust-700"
+                title="Click to remove"
+              >
+                {targetName} ✕
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {remainingOptions.length > 0 && (
+        <div className="mt-2 flex gap-1 items-center">
+          <select
+            className="field text-xs flex-1 min-w-0"
+            value={pending}
+            onChange={(e) => setPending(e.target.value)}
+          >
+            <option value="">Pick {feat.target?.label ?? "target"}…</option>
+            {remainingOptions.map((o) => (
+              <option key={o.id} value={o.id}>{o.name}</option>
+            ))}
+          </select>
+          <button className="btn-secondary text-xs" onClick={add} disabled={!pending}>
+            Add
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Lookup the picklist for a targeted feat.
+function targetOptionsFor(feat: import("../types/pathfinder").Feat): { id: string; name: string }[] {
+  if (!feat.target) return [];
+  if (feat.target.type === "skill") {
+    return SKILLS.map((s) => ({ id: s.id, name: s.name }));
+  }
+  if (feat.target.type === "weapon") {
+    return [...CORE_WEAPONS]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((w) => ({ id: w.id, name: w.name }));
+  }
+  if (feat.target.type === "spell_school") {
+    return [
+      "abjuration", "conjuration", "divination", "enchantment",
+      "evocation", "illusion", "necromancy", "transmutation", "universal",
+    ].map((s) => ({ id: s, name: s.charAt(0).toUpperCase() + s.slice(1) }));
+  }
+  return [];
 }
 
 // ---------- Spells ----------
@@ -712,7 +829,7 @@ function SpellsStep({ draft, update }: { draft: Character; update: (p: Partial<C
               {spellsForList.map((s) => {
                 const lvl = s.levels[listKey]!;
                 const picked = known.some((k) => k.classId === cl.classId && k.spellId === s.id);
-                const dc = spellDC(s, derived, cl.classId);
+                const dc = spellDC(s, derived, cl.classId, draft);
                 const dmg = spellDamage(s.id, cl.level);
                 const hasSave = hasSavingThrow(s);
                 return (

@@ -119,6 +119,14 @@ function aggregateEffectTotals(effects: Effect[]): EffectTotals {
   return t;
 }
 
+// Splits a feat id into its base id and optional target (for target-requiring
+// feats stored as "skill_focus:perception", "weapon_focus:longsword", etc.).
+export function parseFeatId(featId: string): { baseId: string; target?: string } {
+  const idx = featId.indexOf(":");
+  if (idx === -1) return { baseId: featId };
+  return { baseId: featId.slice(0, idx), target: featId.slice(idx + 1) };
+}
+
 // Pulls EffectMods bundles from race traits, chosen feats, and class choices.
 function collectBackgroundMods(character: Character): EffectMods[] {
   const out: EffectMods[] = [];
@@ -127,13 +135,16 @@ function collectBackgroundMods(character: Character): EffectMods[] {
   if (race) {
     for (const t of race.traits) if (t.mods) out.push(t.mods);
   }
-  // Feats
+  // Feats (plain mods only; target-specific bonuses are applied separately
+  // via applyTargetedFeatMods below, since they depend on the chosen target
+  // and may need to read character state — e.g. Skill Focus +6 at 10 ranks).
   const featIds = [
     ...(character.startingFeats ?? []),
     ...character.classLevels.flatMap((cl) => cl.chosenFeats ?? []),
   ];
   for (const fid of featIds) {
-    const feat = FEATS_BY_ID[fid];
+    const { baseId } = parseFeatId(fid);
+    const feat = FEATS_BY_ID[baseId];
     if (feat?.mods) out.push(feat.mods);
   }
   // Class choices
@@ -148,6 +159,32 @@ function collectBackgroundMods(character: Character): EffectMods[] {
     }
   }
   return out;
+}
+
+// Applies target-specific feat bonuses that need the chosen target and
+// possibly character context (e.g. Skill Focus scales at 10 ranks).
+function applyTargetedFeatMods(character: Character, t: EffectTotals): void {
+  const featIds = [
+    ...(character.startingFeats ?? []),
+    ...character.classLevels.flatMap((cl) => cl.chosenFeats ?? []),
+  ];
+  for (const fid of featIds) {
+    const { baseId, target } = parseFeatId(fid);
+    if (!target) continue;
+    if (baseId === "skill_focus") {
+      const ranks = character.classLevels.reduce(
+        (sum, cl) => sum + (cl.skillRanks[target] ?? 0),
+        0,
+      );
+      const bonus = ranks >= 10 ? 6 : 3;
+      t.skillBonuses[target] = (t.skillBonuses[target] ?? 0) + bonus;
+    }
+    // Weapon Focus / Greater Weapon Focus / Improved Critical / Weapon
+    // Specialization / Spell Focus all apply only against a specific
+    // weapon-in-hand or spell school. We don't fold them into the global
+    // attack/damage bonus; they're surfaced on the sheet as named bonuses
+    // and (for Spell Focus) consumed by engine/spells.ts.
+  }
 }
 
 export const SIZE_MODIFIER: Record<Size, number> = {
@@ -256,6 +293,7 @@ export function derive(character: Character): DerivedStats {
   const activeEffects = resolveActiveEffects(character);
   const effectTotals = aggregateEffectTotals(activeEffects);
   for (const m of collectBackgroundMods(character)) applyMods(effectTotals, m);
+  applyTargetedFeatMods(character, effectTotals);
   const negativeLevels = character.negativeLevels ?? 0;
 
   // Ability scores: base + effects + drain/damage

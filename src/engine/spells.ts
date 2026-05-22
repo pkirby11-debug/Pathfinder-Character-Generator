@@ -1,5 +1,6 @@
-import type { Spell, DerivedStats } from "../types/pathfinder";
+import type { Spell, DerivedStats, Character } from "../types/pathfinder";
 import { CLASSES_BY_ID } from "../data/classes/core";
+import { parseFeatId } from ".";
 
 // External link to the canonical OGL reference for a spell on Archives of Nethys.
 // Used as a "look up the full description" affordance in the UI.
@@ -7,19 +8,40 @@ export function spellReferenceUrl(spell: Spell): string {
   return `https://aonprd.com/SpellDisplay.aspx?ItemName=${encodeURIComponent(spell.name)}`;
 }
 
+// Returns the +DC contribution from Spell Focus and Greater Spell Focus
+// for a spell of the given school on the given character. Each feat gives
+// +1; they stack for +2 in the same school.
+function spellFocusBonus(school: string, character: Character | undefined): number {
+  if (!character) return 0;
+  const ids = [
+    ...(character.startingFeats ?? []),
+    ...character.classLevels.flatMap((cl) => cl.chosenFeats ?? []),
+  ];
+  let bonus = 0;
+  for (const fid of ids) {
+    const { baseId, target } = parseFeatId(fid);
+    if ((baseId === "spell_focus" || baseId === "greater_spell_focus") && target === school) {
+      bonus += 1;
+    }
+  }
+  return bonus;
+}
+
 // Computes the save DC for a spell when cast by this character, using the given class.
 // Returns null if the class can't cast it (not on the list, or no spellcasting).
+// Passing `character` factors in Spell Focus / Greater Spell Focus.
 export function spellDC(
   spell: Spell,
   derived: DerivedStats,
   classId: string,
+  character?: Character,
 ): number | null {
   const klass = CLASSES_BY_ID[classId];
   if (!klass?.spellcasting) return null;
   const lvl = spell.levels[klass.spellcasting.list];
   if (lvl === undefined || lvl === null || lvl < 0) return null;
   const mod = derived.abilityMods[klass.spellcasting.ability];
-  return 10 + lvl + mod;
+  return 10 + lvl + mod + spellFocusBonus(spell.school, character);
 }
 
 // Computes the damage dice/expression for a spell at a given caster level, where the
